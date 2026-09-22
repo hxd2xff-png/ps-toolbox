@@ -174,6 +174,18 @@ const hostSrc2 = fs.readFileSync(path.join(SRC, 'jsx', 'host.jsx'), 'utf8');
 ok(/args\.syncColor === false \? null : args\.cnColor/.test(hostSrc2), '宿主：关闭时不构建颜色键');
 ok(/args\.syncColor === false \? null : \(isCJK \? args\.cnColor : args\.enColor\)/.test(hostSrc2), '容岝：整层兜底也尊重开关');
 
+// 符号归属开关（symSide）：两卡片互斥按钮、三态语义、配置透传、方案与旧方案兼容
+ok(/id="sym-cn"/.test(html) && /id="sym-en"/.test(html), '中/英卡片各有符号归属按钮');
+ok(/symSide === 'cn' \? '' : 'cn'/.test(inline), '符号用中文：三态切换（再点回自动）');
+ok(/symSide === 'en' \? '' : 'en'/.test(inline), '符号用英文：三态切换（再点回自动）');
+ok(/if \(symSide\) cfg\.symSide = symSide/.test(inline), 'auto 时不发 symSide（宿主缺省即自动）');
+ok(/setSymSide\(p\.symSide \|\| ''/.test(inline), '方案回填 symSide，缺省按自动（旧方案兼容）');
+ok(/function sideOfChar\(ch, symSide\)/.test(hostSrc2), '宿主：符号归属入口 sideOfChar 存在');
+ok(/isSymbolChar\(ch\)/.test(hostSrc2) && /symSide === 'cn'/.test(hostSrc2) && /symSide === 'en'/.test(hostSrc2), '宿主：符号三分类（仅符号跟随开关）');
+ok(/segmentsOf\(text, symSide\)/.test(hostSrc2), '宿主：分区函数感知 symSide');
+ok(/segmentsOf\(text\.substring\(rr\.from, Math\.min\(rr\.to, text\.length\)\), 'auto'\)/.test(hostSrc2), '宿主：识别聚合固定 auto（识别不受开关影响）');
+ok(/segmentsOf\(text, args\.symSide\)/.test(hostSrc2), '宿主：整层兜底感知 symSide');
+
 /* ---------- E. 双端消息协议对账 ---------- */
 section('E. UI ↔ 宿主 协议对账');
 const uiSent = new Set([...inline.matchAll(/send\(\{ type: '([a-z-]+)'/g)].map((m) => m[1]));

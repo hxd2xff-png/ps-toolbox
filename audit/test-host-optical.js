@@ -198,7 +198,7 @@ Object.defineProperty(textLayer.textItem, 'autoKerning', {
   get: () => stored,
   set: () => { /* 静默忽略写入 */ },
 });
-textLayer.textItem.contents = '中(文)号';
+textLayer.textItem.contents = '中文「号」”；外文：ok';   // 全角对才触发外缘回退路径
 const setsBefore = PS.sets;
 r = call('auto-kerning', { pairedOuterValue: -45 });
 check(!r.error && r.optical === 0 && r.tracking === 1 && r.mode === 'tracking', '写入被忽略 → 回退符号字距', JSON.stringify(r));

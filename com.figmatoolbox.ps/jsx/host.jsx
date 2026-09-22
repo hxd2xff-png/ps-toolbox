@@ -42,7 +42,7 @@
 
 var cephostDispatch = (function () {
 
-    var HOST_VERSION = '4.3.1';
+    var HOST_VERSION = '4.5.0';
     var _stage = 'init';
     function stage(s) { _stage = s; return s; }
 
@@ -59,7 +59,45 @@ var cephostDispatch = (function () {
         if (c >= 0xAC00 && c <= 0xD7AF) return true;  // hangul
         if (c >= 0xF900 && c <= 0xFAFF) return true;  // compat ideographs
         if (c >= 0xFF00 && c <= 0xFFEF) return true;  // fullwidth forms: brackets, marks, yen
+        if (c >= 0x2160 && c <= 0x217F) return true;  // roman numerals I II III (no glyphs in Latin display fonts)
+        if (c >= 0x2460 && c <= 0x24FF) return true;  // circled numbers (no glyphs in Latin display fonts)
+        if (c >= 0x30A0 && c <= 0x30FF) return true;  // (covered by kana) kept explicit for clarity
         return false;
+    }
+
+    /* Symbols are characters that could live on either side: punctuation,
+       brackets, quotes, dashes (both halfwidth and CJK/fullwidth). Letters and
+       digits are never symbols: ideographs/kana/hangul and fullwidth alphanums
+       are always Chinese-side, Latin letters/digits are always English-side.
+       The symSide option (v4.4.0) only moves these characters. */
+    function isSymbolChar(ch) {
+        var c = ch.charCodeAt(0);
+        if (c >= 0x20 && c <= 0x2F) return true;      // space .. slash
+        if (c >= 0x3A && c <= 0x40) return true;      // colon .. @
+        if (c >= 0x5B && c <= 0x60) return true;      // [ .. backtick
+        if (c >= 0x7B && c <= 0x7F) return true;      // { .. DEL zone
+        if (c >= 0x2000 && c <= 0x206F) return true;  // general punct: dashes, quotes
+        if (c >= 0x2160 && c <= 0x217F) return true;  // roman numerals I II III
+        if (c >= 0x2460 && c <= 0x24FF) return true;  // circled numbers
+        if (c >= 0x3000 && c <= 0x303F) return true;  // CJK symbols: corner brackets
+        if (c >= 0xFF01 && c <= 0xFF0F) return true;  // fullwidth ! .. /
+        if (c >= 0xFF1A && c <= 0xFF20) return true;  // fullwidth : .. @
+        if (c >= 0xFF3B && c <= 0xFF40) return true;  // fullwidth [ .. backtick
+        if (c >= 0xFF5B && c <= 0xFF64) return true;  // fullwidth { .. marks
+        return false;
+    }
+
+    /* Side of one character under a symSide mode:
+       'auto' = historic isCJK behaviour (CJK punct -> Chinese, rest -> English);
+       'cn'   = every symbol goes to the Chinese font;
+       'en'   = every symbol (incl. CJK punct) goes to the English font.
+       Returns true for Chinese side, false for English side. */
+    function sideOfChar(ch, symSide) {
+        // explicit switch wins for ALL symbol-class characters (fullwidth,
+        // halfwidth, roman numerals, circled numbers) -- no default overrides it
+        if (symSide === 'cn' && isSymbolChar(ch)) return true;
+        if (symSide === 'en' && isSymbolChar(ch)) return false;
+        return isCJK(ch);
     }
 
     function esc(s) {
@@ -161,9 +199,54 @@ var cephostDispatch = (function () {
         try { if (typeof x.length === 'number') return x; } catch (e) { }
         return null;
     }
+    /* ---------------- selected layers: descriptor first, DOM fallback ----------------
+       DOM activeLayers is unreliable with multi-selection in some Photoshop
+       versions (returns only one layer or the group). The Action Manager
+       property 'targetLayers' on the document descriptor is the authoritative
+       list; it yields indexed references we must resolve via itemIndex. */
+    function targetLayerIds() {
+        var ref = new ActionReference();
+        ref.putProperty(S('property'), S('targetLayers'));
+        ref.putEnumerated(S('document'), S('ordinal'), S('targetEnum'));
+        var d;
+        try { d = executeActionGet(ref); } catch (e) { return null; }
+        if (!d || !d.hasKey(S('targetLayers'))) return null;
+        var list = d.getList(S('targetLayers'));
+        var ids = [], i;
+        for (i = 0; i < list.count; i++) {
+            try { ids.push(list.getReference(i).getIdentifier()); } catch (e2) { }
+        }
+        return ids;
+    }
+
+    function layerById(idNum) {
+        var ref = new ActionReference();
+        ref.putIdentifier(S('layer'), idNum);
+        var d;
+        try { d = executeActionGet(ref); } catch (e) { return null; }
+        if (!d) return null;
+        var name = '';
+        try { name = d.getString(S('name')); } catch (e2) { }
+        return { id: idNum, name: name, typename: 'ArtLayer', _amOnly: true };
+    }
+
     function activeLayerSource() {
         var d = docSafe();
         if (!d) return { refs: [], from: 'no-document' };
+        // 1. authoritative: AM targetLayers (true multi-selection)
+        var ids = targetLayerIds();
+        if (ids && ids.length) {
+            var refs = [], i, dom = null;
+            for (i = 0; i < ids.length; i++) {
+                dom = layerDomById(d, ids[i]);
+                if (dom) refs.push(dom);
+                else {
+                    var am = layerById(ids[i]);
+                    if (am) refs.push(am);
+                }
+            }
+            if (refs.length) return { refs: refs, from: 'targetLayers' };
+        }
         var l = null;
         try { l = asArray(d.activeLayers); } catch (e1) { }
         if (l && l.length) return { refs: l, from: 'activeLayers' };
@@ -174,6 +257,20 @@ var cephostDispatch = (function () {
             if (one) return { refs: [one], from: 'activeLayer' };
         } catch (e3) { }
         return { refs: [], from: 'empty' };
+    }
+
+    /* DOM lookup by layer id: walk the whole layer tree once and match ids.
+       Cached per document instance signature to keep selection polling cheap. */
+    var _domWalkSig = '', _domWalkMap = null;
+    function layerDomById(doc, idNum) {
+        var sig = '';
+        try { sig = String(doc.name) + ':' + doc.layers.length; } catch (eS) { return null; }
+        if (_domWalkSig !== sig || !_domWalkMap) {
+            _domWalkSig = sig;
+            _domWalkMap = {};
+            walkLayers(asArray(doc.layers), function (l) { try { _domWalkMap[l.id] = l; } catch (eI) { } });
+        }
+        return _domWalkMap[idNum] || null;
     }
     function activeLayersSafe() { return activeLayerSource().refs; }
 
@@ -192,6 +289,7 @@ var cephostDispatch = (function () {
         for (var i = 0; i < refs.length; i++) walkOne(refs[i], fn);
     }
     function isTextLayer(l) {
+        if (l && l._amOnly) return true;   // AM targetLayers ref: textKey read will decide
         try {
             if (typeof LayerKind !== 'undefined' && LayerKind && LayerKind.TEXT !== undefined) return l.kind === LayerKind.TEXT;
         } catch (e) { }
@@ -426,7 +524,30 @@ var cephostDispatch = (function () {
         return null;
     }
 
+    /* Split one plan segment at the boundaries of the old style ranges so
+       every piece inherits its OWN base style. Returns [{from,to,base,....}]. */
+    function splitAtBaseBounds(seg, oldList) {
+        var out = [], from = seg.from, to = seg.to, idx = from;
+        while (idx < to) {
+            var b = pickBaseRange(oldList, idx);
+            var bTo = to;
+            if (b) {
+                var bEnd = b.getInteger(S('to'));
+                if (bEnd > idx && bEnd < to) bTo = bEnd;
+            }
+            var piece = { from: idx, to: bTo, psName: seg.psName, size: seg.size, rgb: seg.rgb, trck: seg.trck, autoLeading: seg.autoLeading, base: b };
+            out.push(piece);
+            idx = bTo;
+        }
+        return out;
+    }
+
     // plan: contiguous {from,to,psName,size,rgb,trck} covering [0,textLen)
+    // Baseline properties (super/subscript, underline, strikethrough etc.)
+    // live per style range. A plan segment may span several old ranges, so we
+    // split each segment at old-range boundaries and clone the base style of
+    // EACH piece -- cloning only the start would stamp e.g. superscript onto
+    // following normal text.
     function applyRanges(layerId, plan, textLen) {
         _layerScale = layerScaleOf(layerId);   // compensate layer transforms
         var tk = textKeyOf(layerId);
@@ -435,14 +556,18 @@ var cephostDispatch = (function () {
         var i, seg, base, item, style;
         for (i = 0; i < plan.length; i++) {
             seg = plan[i];
-            base = pickBaseRange(old, seg.from);
-            item = base ? copyDesc(base) : new ActionDescriptor();
-            style = hasKey(item, 'textStyle') ? copyDesc(item.getObjectValue(S('textStyle'))) : new ActionDescriptor();
-            overrideStyle(style, seg);
-            item.putInteger(S('from'), seg.from);
-            item.putInteger(S('to'), seg.to);
-            item.putObject(S('textStyle'), S('textStyle'), style);
-            list.putObject(S('textStyleRange'), item);
+            var cuts = splitAtBaseBounds(seg, old), c;
+            for (c = 0; c < cuts.length; c++) {
+                var piece = cuts[c];
+                base = piece.base;
+                item = base ? copyDesc(base) : new ActionDescriptor();
+                style = hasKey(item, 'textStyle') ? copyDesc(item.getObjectValue(S('textStyle'))) : new ActionDescriptor();
+                overrideStyle(style, piece);
+                item.putInteger(S('from'), piece.from);
+                item.putInteger(S('to'), piece.to);
+                item.putObject(S('textStyle'), S('textStyle'), style);
+                list.putObject(S('textStyleRange'), item);
+            }
         }
         // engineData is an opaque snapshot of the old typesetting.
         // Writing it back alongside fresh ranges reverts the change.
@@ -549,12 +674,12 @@ var cephostDispatch = (function () {
 
     /* ---------------- text: segmentation ---------------- */
 
-    function segmentsOf(text) {
+    function segmentsOf(text, symSide) {
         var segs = [], start = 0, prev = false, i, cur;
         if (!text || !text.length) return segs;
-        prev = isCJK(text.charAt(0));
+        prev = sideOfChar(text.charAt(0), symSide);
         for (i = 1; i < text.length; i++) {
-            cur = isCJK(text.charAt(i));
+            cur = sideOfChar(text.charAt(i), symSide);
             if (cur !== prev) { segs.push([start, i, prev]); start = i; prev = cur; }
         }
         segs.push([start, text.length, prev]);
@@ -586,10 +711,12 @@ var cephostDispatch = (function () {
         };
     }
 
-    function fontPerChar(text, cnPS, enPS, cnSize, enSize, cnColor, enColor) {
+
+
+    function fontPerChar(text, cnPS, enPS, cnSize, enSize, cnColor, enColor, symSide) {
         var cnO = { psName: cnPS, size: cnSize, rgb: cnColor, trck: null };
         var enO = { psName: enPS, size: enSize, rgb: enColor, trck: null };
-        var segs = segmentsOf(text), perChar = [], i, j, o;
+        var segs = segmentsOf(text, symSide), perChar = [], i, j, o;
         for (i = 0; i < segs.length; i++) {
             o = segs[i][2] ? cnO : enO;
             for (j = segs[i][0]; j < segs[i][1]; j++) perChar[j] = o;
@@ -651,7 +778,7 @@ var cephostDispatch = (function () {
     // the first segment decides the whole layer font (CJK text -> CJK font)
     function wholeLayerFallback(layer, text, args, cnPS, enPS) {
         stage('layer-fallback');
-        var segs = segmentsOf(text);
+        var segs = segmentsOf(text, args.symSide);
         var isCJK = (segs.length && text.length) ? segs[0][2] : true;
         _trace = 'dom fallback ps=' + ((isCJK ? cnPS : enPS) || 'none');
         // syncColor=false: colors are never touched, not even in the fallback
@@ -693,7 +820,7 @@ var cephostDispatch = (function () {
                 _trace = '';
                 text = textContentsOf(layer);
                 if (!text.length) { out.ok++; continue; }
-                var plan = fontPerChar(text, cnPS, enPS, args.cnSize, args.enSize, args.syncColor === false ? null : args.cnColor, args.syncColor === false ? null : args.enColor);
+                var plan = fontPerChar(text, cnPS, enPS, args.cnSize, args.enSize, args.syncColor === false ? null : args.cnColor, args.syncColor === false ? null : args.enColor, args.symSide);
                 _trace = 'ranges=' + plan.length + ' cn=' + (cnPS || 'none') + ' en=' + (enPS || 'none');
                 var notes = [];
                 stage('layer ' + (i + 1) + ' write ' + plan.length + ' ranges');
@@ -781,7 +908,7 @@ var cephostDispatch = (function () {
             var rr = ranges[k];
             if (rr.to <= rr.from) continue;
             if (rr.size == null) { unknown.cn = true; unknown.en = true; }
-            var segs = segmentsOf(text.substring(rr.from, Math.min(rr.to, text.length)));
+            var segs = segmentsOf(text.substring(rr.from, Math.min(rr.to, text.length)), 'auto');
             for (var s = 0; s < segs.length; s++) {
                 var side = segs[s][2] ? 'cn' : 'en';
                 seen[side] = true;
@@ -936,24 +1063,24 @@ var cephostDispatch = (function () {
         var text = textContentsOf(layer);
         if (text.length < 2) return 0;
 
-        // symbol test: Unicode symbol blocks + ASCII punctuation.
-        // The backtick is written as \u0060 so the source stays ASCII.
-        var symRe = /[\u2000-\u206F\u2E00-\u2E7F\u3000-\u303F\uFF01-\uFF20\uFF3B-\uFF40\uFF5B-\uFF65!-\/:-@\[-\u0060{-~]/;
+        // CJK punctuation only: the paired-outer nudge targets fullwidth
+        // brackets/quotes. Halfwidth (ASCII) punctuation keeps its own spacing.
+        var symRe = /[\u2000-\u206F\u2E00-\u2E7F\u3000-\u303F\uFF01-\uFF20\uFF3B-\uFF40\uFF5B-\uFF65]/;
         var excl = { '#': 1, '*': 1, '\u00A5': 1, '\u00B7': 1, '~': 1, '%': 1, '&': 1, '.': 1, '/': 1, '\\': 1, '-': 1, '+': 1 };
-        var openPairs = {
-            '(': ')', '[': ']', '{': '}',
+        // paired OUTER nudge: fullwidth pairs only (Chinese punctuation)
+        var openPairsOuter = {
             '\uFF08': '\uFF09', '\uFF3B': '\uFF3D', '\u3010': '\u3011', '\u300A': '\u300B',
             '\u3008': '\u3009', '\u201C': '\u201D', '\u2018': '\u2019',
             '\u300C': '\u300D', '\u300E': '\u300F', '\uFF5B': '\uFF5D'
         };
-        var closeMap = {};
-        for (var pk in openPairs) if (openPairs.hasOwnProperty(pk)) closeMap[openPairs[pk]] = pk;
+        var closeMapOuter = {};
+        for (var pk in openPairsOuter) if (openPairsOuter.hasOwnProperty(pk)) closeMapOuter[openPairsOuter[pk]] = pk;
 
         var stack = [], matched = [], idx, ch;
         for (idx = 0; idx < text.length; idx++) {
             ch = text.charAt(idx);
-            if (openPairs[ch]) stack.push(idx);
-            else if (closeMap[ch] && stack.length && openPairs[text.charAt(stack[stack.length - 1])] === ch) {
+            if (openPairsOuter[ch]) stack.push(idx);
+            else if (closeMapOuter[ch] && stack.length && openPairsOuter[text.charAt(stack[stack.length - 1])] === ch) {
                 matched.push([stack.pop(), idx]);
             }
         }

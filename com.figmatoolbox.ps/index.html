@@ -461,6 +461,9 @@
       transition: all .18s ease;
     }
     .btn-ghost:hover { background: #FFF7F3; border-color: #FFCDB8; }
+    /* 符号归属开关：选中态用主题橙填充，一眼可辨当前归属 */
+    .sym-btn.active { background: #FF5A2B; border-color: #FF5A2B; color: #fff; }
+    .sym-btn.active:hover { background: #F04E20; border-color: #F04E20; }
     .btn-ghost:active { transform: translateY(1px); }
 
     /* ---------- 文本 ---------- */
@@ -535,7 +538,7 @@
       <div class="status" id="host-status"></div>
 
       <div class="card" data-page-node-id="fTFDw4xiKJcAtnY7PhhPGC">
-        <div class="card-head" data-page-node-id="SvAAbqnrdcJbydKlFuBJQT"><span class="dot cn" data-page-node-id="jDJeCWDVryzUERlZfljamX"></span>中文</div>
+        <div class="card-head" style="display:flex;align-items:center;justify-content:space-between" data-page-node-id="SvAAbqnrdcJbydKlFuBJQT"><span class="lang-title"><span class="dot cn" data-page-node-id="jDJeCWDVryzUERlZfljamX"></span>中文</span><button type="button" class="btn-ghost sym-btn" id="sym-cn" style="padding:5px 10px;font-size:11px" title="再点一次恢复自动：符号归属按默认规则（全角标点归中文，半角标点归英文）">符号用中文</button></div>
         <div class="field" data-page-node-id="8JniWzZr2M3XijmLNCxlZX">
           <label data-page-node-id="3zQxF4nq2VNjcZk2BW7AyS">字体</label>
           <div class="dd" data-target="cn-font" data-placeholder="选择字体…">
@@ -565,7 +568,7 @@
       </div>
 
       <div class="card" data-page-node-id="h68brhrpkutEVZpZFFAe7I">
-        <div class="card-head" style="display:flex;align-items:center;justify-content:space-between" data-page-node-id="OHbNMT9E012hFuj2odwciv"><span class="lang-title"><span class="dot en" data-page-node-id="jIF2AF8GGfPkgYEOKG1dH7"></span>英文</span><span style="display:flex;align-items:center;gap:5px"><label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--muted);cursor:pointer" title="勾选后：把行间距设为 Photoshop 的「自动」；不勾选则完全不碰行间距"><input id="kerning-leading" type="checkbox" checked style="width:13px;height:13px;margin:0"/><span>行距自动</span></label><label style="display:flex;align-items:center;gap:2px;font-size:11px;color:var(--muted)"><input id="kerning-outer" type="number" value="-45" step="1" style="width:48px;padding:5px 4px;text-align:center"/><span>%</span></label><button class="btn-ghost" id="kerning-apply" style="padding:5px 10px;font-size:11px">自动微调</button></span></div><div class="status" id="kerning-status"></div>
+        <div class="card-head" style="display:flex;align-items:center;justify-content:space-between" data-page-node-id="OHbNMT9E012hFuj2odwciv"><span class="lang-title"><span class="dot en" data-page-node-id="jIF2AF8GGfPkgYEOKG1dH7"></span>英文</span><span style="display:flex;align-items:center;gap:5px"><button type="button" class="btn-ghost sym-btn" id="sym-en" style="padding:5px 10px;font-size:11px" title="再点一次恢复自动：符号归属按默认规则（全角标点归中文，半角标点归英文）">符号用英文</button><label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--muted);cursor:pointer" title="勾选后：把行间距设为 Photoshop 的「自动」；不勾选则完全不碰行间距"><input id="kerning-leading" type="checkbox" checked style="width:13px;height:13px;margin:0"/><span>行距自动</span></label><label style="display:flex;align-items:center;gap:2px;font-size:11px;color:var(--muted)"><input id="kerning-outer" type="number" value="-45" step="1" style="width:48px;padding:5px 4px;text-align:center"/><span>%</span></label><button class="btn-ghost" id="kerning-apply" style="padding:5px 10px;font-size:11px">自动微调</button></span></div><div class="status" id="kerning-status"></div>
         <div class="field" data-page-node-id="pix27OwA2SVYSuEgOuH2gJ">
           <label data-page-node-id="AaPEWEFKDmEP5rQP9ilIou">字体</label>
           <div class="dd" data-target="en-font" data-placeholder="选择字体…">
@@ -746,7 +749,7 @@
 
     // 面板期望的宿主版本：与 jsx/host.jsx 的 HOST_VERSION 一致。
     // 用于发现「PS 启动时 ScriptPath 已加载旧版宿主」并强制重载，无需重启 Photoshop。
-    const HOST_EXPECT = '4.3.1';
+    const HOST_EXPECT = '4.5.0';
     const EXT_DIR = (() => {
       try { return cs.getSystemPath(SystemPath.EXTENSION) || ''; } catch (e) { return ''; }
     })();
@@ -1157,7 +1160,7 @@
         return;
       }
       // 颜色行为说明：点的是哪半边按钮就按哪边算，与方案里存的 syncColor 无关
-      const colorNote = lastSyncColor ? '；已按左右侧字色同步颜色' : '；未调整颜色（保留原文字颜色）';
+      const colorNote = (lastSyncColor ? '；已按左右侧字色同步颜色' : '；未调整颜色（保留原文字颜色）') + symSideNote();
       // 字体被 Photoshop 替换：写入结果保留，只如实说明哪一段被换掉
       // 整层退化（layerFallback）：分段写入被整体拒绝时的兜底，说明用了哪条路径
       if ((msg.substituted || []).length) {
@@ -1495,6 +1498,29 @@
       catch (e) { return null; }
     }
     let lastSyncColor = false;   // 最近一次应用是否带颜色（默认不调整颜色）
+
+    /* ---- 符号归属开关：'' = 自动 / 'cn' = 符号用中文 / 'en' = 符号用英文 ----
+       三态互斥，再点激活按钮恢复自动；持久化到 localStorage，方案里随存随取，
+       旧方案无 symSide 字段按自动处理（与宿主缺省一致）。 */
+    let symSide = '';   // '' | 'cn' | 'en'
+    const SYM_LS_KEY = 'ps-toolbox-sym-side';
+    function renderSymSide() {
+      $('#sym-cn').classList.toggle('active', symSide === 'cn');
+      $('#sym-en').classList.toggle('active', symSide === 'en');
+    }
+    function setSymSide(v, persist) {
+      symSide = (v === 'cn' || v === 'en') ? v : '';
+      renderSymSide();
+      if (persist) lsWrite(SYM_LS_KEY, symSide);
+    }
+    $('#sym-cn').addEventListener('click', () => setSymSide(symSide === 'cn' ? '' : 'cn', true));
+    $('#sym-en').addEventListener('click', () => setSymSide(symSide === 'en' ? '' : 'en', true));
+    setSymSide(lsRead(SYM_LS_KEY) || '', false);   // 启动恢复（坏值回落自动）
+    function symSideNote() {
+      return symSide === 'cn' ? '；符号已指定用中文字体'
+           : symSide === 'en' ? '；符号已指定用英文字体'
+           : '；符号归属自动（全角归中文，半角归英文）';
+    }
     function fontLabel(f) { return f ? f.family + ' / ' + f.style : ''; }
     // 设置某一路字体：写状态 + 更新下拉显示（字体不在本机列表时自动补选项）
     function setFontValue(which, font) {
@@ -1519,6 +1545,7 @@
         enSize: numInput($('#en-size')),
         syncColor: !!withColor,
       };
+      if (symSide) cfg.symSide = symSide;   // auto 时不发，宿主缺省即自动
       if (withColor) {
         cfg.cnColor = hexToRgb($('#cn-color').value);
         cfg.enColor = hexToRgb($('#en-color').value);
@@ -1575,6 +1602,7 @@
         cnSize: numInput($('#cn-size')),
         enSize: numInput($('#en-size')),
         syncColor: lastSyncColor,   // 记录保存时是否同步颜色；旧方案无此字段，按关闭处理
+        symSide,                    // '' | 'cn' | 'en'；旧方案无此字段，按自动处理
         cnColor: hexToRgb($('#cn-color').value),
         enColor: hexToRgb($('#en-color').value),
       };
@@ -1682,6 +1710,7 @@
       $('#cn-size').value = p.cnSize != null ? p.cnSize : '';
       $('#en-size').value = p.enSize != null ? p.enSize : '';
       lastSyncColor = p.syncColor === true;   // 旧方案无此字段 → 默认不调整颜色
+      setSymSide(p.symSide || '', true);      // 旧方案无此字段 → 恢复自动
       if (p.cnColor) $('#cn-color').value = rgbToHex(p.cnColor);
       if (p.enColor) $('#en-color').value = rgbToHex(p.enColor);
     }

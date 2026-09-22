@@ -54,6 +54,7 @@ class FakeList {
   constructor(items) { this.items = items || []; }
   get count() { return this.items.length; }
   getObjectValue(i) { return this.items[i]; }
+  getReference(i) { return this.items[i]; }
   putObject(cls, item) { const v = item === undefined ? cls : item; this.items.push(v); }
   putInteger(cls, v) { this.items.push(v); }
 }
@@ -95,6 +96,11 @@ class FakeRef {
   putIdentifier(k, v) { this.identifierKey = k; this.identifierValue = v; }
   putIndex(k, i) { this.identifierKey = k; this.identifierValue = i; }
   putEnumerated() { }
+}
+/* reference inside the targetLayers list: getIdentifier() -> layer id */
+class FakeRef2 {
+  constructor(idv) { this.idv = idv; }
+  getIdentifier() { return this.idv; }
 }
 
 /* ---- 字体 ---- */
@@ -189,6 +195,18 @@ function executeActionGet(ref) {
     if (!st) throw new Error('no textKey for layer ' + ref.identifierValue);
     return new FakeDesc(new Map([[id('textKey'), textKeyDescOf(st)]]));
   }
+  if (ref instanceof FakeRef && ref.property === id('targetLayers')) {
+    if (PS.targetLayerIds === null) throw new Error('no targetLayers property');
+    const lst = new FakeList(PS.targetLayerIds.map((i) => new FakeRef2(i)));
+    return new FakeDesc(new Map([[id('targetLayers'), lst]]));
+  }
+  if (ref instanceof FakeRef && ref.identifierKey === id('layer')) {
+    // bare layer reference (id lookup): return name only
+    for (const [lid, st] of PS.textKeys) {
+      if (lid === ref.identifierValue) return new FakeDesc(new Map([[id('name'), 'layer-' + lid]]));
+    }
+    throw new Error('no layer ' + ref.identifierValue);
+  }
   throw new Error('executeActionGet: unsupported reference');
 }
 function executeAction(action, desc) {
@@ -225,6 +243,7 @@ function executeAction(action, desc) {
 function executeActionGetAutoKerning() { return null; }
 
 /* ---- app ---- */
+PS.targetLayerIds = null;   // null = stub has no targetLayers (DOM fallback path)
 const mainLayer = makeLayer('hello 世界', [
   { from: 0, to: 6, style: styleOf('Inter-Regular', 18, [0, 0, 0]) },
   { from: 6, to: 8, style: styleOf('PingFangSC-Regular', 16, [255, 0, 0]) },
@@ -302,7 +321,7 @@ const stale = () => { fails++; };
 
 /* ---- 1. 基础 API ---- */
 let r = tryCall('ping');
-check(r.ok && r.parsed.pong === true && r.parsed.version === '4.3.1', 'ping -> v4.3.1');
+check(r.ok && r.parsed.pong === true && r.parsed.version === '4.5.0', 'ping -> v4.5.0');
 
 r = tryCall('list-fonts');
 check(r.ok && r.parsed.families.length === 3, 'list-fonts merges families (3)');
@@ -373,6 +392,53 @@ check(r.ok && r.parsed.substituted.length === 0 && r.parsed.layerFallback.length
   for (let t = 0; t < w.length; t++) { if (w[t].from !== cov) tiling = false; cov = w[t].to; }
   check(tiling && cov === USER_TEXT.length, 'ranges tile the full text');
 }
+mainDoc.activeLayers = [mainLayer];
+mainDoc.activeLayer = mainLayer;
+
+/* ---- 4c. symSide: symbol ownership switch (auto / cn / en) ----
+   Text "Hi (你好)" - halfwidth ( ) are auto-side English; fullwidth chars
+   are always Chinese; latin letters are always English. */
+const SYM_TEXT = 'Hi(你好)';
+function makeSymLayer() {
+  const l = makeLayer('sym layer', [{ from: 0, to: SYM_TEXT.length, style: styleOf('Inter-Regular', 18, [0, 0, 0]) }]);
+  l.textItem._state.text = SYM_TEXT;
+  mainDoc.activeLayers = [l];
+  mainDoc.activeLayer = l;
+  return l;
+}
+const symFontAt = (w, k) => { for (let t = 0; t < w.length; t++) if (k >= w[t].from && k < w[t].to) return w[t].style.getString(id('fontPostScriptName')); return null; };
+// auto: halfwidth ( ) stay English-side (historic behaviour)
+let symLayer = makeSymLayer();
+r = tryCall('font-mixer', { cnFont: { family: 'PingFang SC', style: 'Bold' }, enFont: { family: 'Inter', style: 'Regular' } });
+check(r.ok && r.parsed.ok === 1 && r.parsed.path === 'canonical', 'symSide auto: mix runs on canonical path');
+let w = symLayer.textItem._state.ranges;
+checkEq(symFontAt(w, 0), 'Inter-Regular', 'symSide auto: latin H stays English');
+checkEq(symFontAt(w, 2), 'Inter-Regular', 'symSide auto: halfwidth ( stays English');
+checkEq(symFontAt(w, 3), 'PingFangSC-Bold', 'symSide auto: ideograph stays Chinese');
+checkEq(symFontAt(w, 5), 'Inter-Regular', 'symSide auto: halfwidth ) stays English');
+// cn: ALL symbols (halfwidth included) go to the Chinese font
+symLayer = makeSymLayer();
+r = tryCall('font-mixer', { cnFont: { family: 'PingFang SC', style: 'Bold' }, enFont: { family: 'Inter', style: 'Regular' }, symSide: 'cn' });
+check(r.ok && r.parsed.ok === 1 && r.parsed.path === 'canonical', 'symSide cn: mix runs on canonical path');
+w = symLayer.textItem._state.ranges;
+checkEq(symFontAt(w, 0), 'Inter-Regular', 'symSide cn: latin letters never move');
+checkEq(symFontAt(w, 2), 'PingFangSC-Bold', 'symSide cn: halfwidth ( moved to Chinese font');
+checkEq(symFontAt(w, 5), 'PingFangSC-Bold', 'symSide cn: halfwidth ) moved to Chinese font');
+let cov2 = 0, tile2 = true;
+for (let t = 0; t < w.length; t++) { if (w[t].from !== cov2) tile2 = false; cov2 = w[t].to; }
+check(tile2 && cov2 === SYM_TEXT.length, 'symSide cn: ranges still tile the whole text');
+// en: fullwidth/CJK punctuation joins the English side
+const FW_SYM = '「Hi」';
+const fwl = makeLayer('fw sym layer', [{ from: 0, to: FW_SYM.length, style: styleOf('Inter-Regular', 18, [0, 0, 0]) }]);
+fwl.textItem._state.text = FW_SYM;
+mainDoc.activeLayers = [fwl];
+mainDoc.activeLayer = fwl;
+r = tryCall('font-mixer', { cnFont: { family: 'PingFang SC', style: 'Bold' }, enFont: { family: 'Inter', style: 'Regular' }, symSide: 'en' });
+check(r.ok && r.parsed.ok === 1, 'symSide en: mix runs');
+wf = fwl.textItem._state.ranges;
+checkEq(symFontAt(wf, 0), 'Inter-Regular', 'symSide en: fullwidth corner bracket moved to English font');
+checkEq(symFontAt(wf, 3), 'Inter-Regular', 'symSide en: closing corner bracket moved to English font');
+checkEq(symFontAt(wf, 1), 'Inter-Regular', 'symSide en: latin inside stays English');
 mainDoc.activeLayers = [mainLayer];
 mainDoc.activeLayer = mainLayer;
 
@@ -576,7 +642,70 @@ mainLayer.textItem.autoKerning = 0;
   delete mainLayer.textItem.useAutoLeading;
 }
 
-/* ============================================================   13. syncColor: optional colour sync for the font mixer   Default off -> only fonts/sizes are written; the original colors   arrive untouched via the copied base style. On -> per-side colors   are applied. The whole-layer DOM fallback honours the switch too.   ============================================================ */function rangeColors(wr) {  return wr.map((x) => (x.style.hasKey(id('color')) ? [x.style.store.get(id('color')).store.get(id('red')), x.style.store.get(id('color')).store.get(id('blue'))] : null));}/* on: colors are written per side */mainLayer.textItem._state.ranges = [{ from: 0, to: 8, style: styleOf('Inter-Regular', 24, [0.1, 0.2, 0.3]) }];r = tryCall('font-mixer', { cnFont: { family: 'PingFang SC', style: 'Bold' }, enFont: { family: 'Inter', style: 'Regular' }, syncColor: true, cnColor: { r: 1, g: 0, b: 0 }, enColor: { r: 0, g: 0, b: 1 } });check(r.ok && r.parsed.ok === 1, 'syncColor on: apply succeeds');checkEq(r.parsed.path, 'canonical', 'syncColor on: canonical path');{  const cs = rangeColors(mainLayer.textItem._state.ranges);  check(cs[0] !== null && cs[0][1] > 0.9, 'syncColor on: EN range got blue');  check(cs[1] !== null && cs[1][0] > 0.9, 'syncColor on: CN range got red');}/* omitted (legacy panel/legacy scheme semantics): original colors kept */mainLayer.textItem._state.ranges = [{ from: 0, to: 8, style: styleOf('Inter-Regular', 24, [0.1, 0.2, 0.3]) }];r = tryCall('font-mixer', { cnFont: { family: 'PingFang SC', style: 'Bold' }, enFont: { family: 'Inter', style: 'Regular' }, cnSize: 30, enSize: 30 });check(r.ok && r.parsed.ok === 1 && r.parsed.path === 'canonical', 'syncColor omitted (legacy): apply succeeds');{  const cs = rangeColors(mainLayer.textItem._state.ranges);  check(cs.length === 2 && cs.every((c) => c && c[0] === 0.1 && c[1] === 0.3), 'syncColor omitted: original colors kept: ' + JSON.stringify(cs));}/* explicitly off: same semantics */mainLayer.textItem._state.ranges = [{ from: 0, to: 8, style: styleOf('Inter-Regular', 24, [0.1, 0.2, 0.3]) }];r = tryCall('font-mixer', { cnFont: { family: 'PingFang SC', style: 'Bold' }, enFont: { family: 'Inter', style: 'Regular' }, syncColor: false });check(r.ok && r.parsed.ok === 1, 'syncColor false: apply succeeds');{  const cs = rangeColors(mainLayer.textItem._state.ranges);  check(cs.every((c) => c && c[0] === 0.1 && c[1] === 0.3), 'syncColor false: original colors kept everywhere: ' + JSON.stringify(cs));}/* the whole-layer DOM fallback must also honour the switch */PS.throwOnSet = 'the command Set is not currently available';const noColLayer = makeLayer('nocolor fallback layer', [{ from: 0, to: 8, style: styleOf('Inter-Regular', 18, [0.1, 0.2, 0.3]) }]);noColLayer.textItem.contents = 'Mix 24H';mainDoc.activeLayers = [noColLayer];mainDoc.activeLayer = noColLayer;const colorBefore = noColLayer.textItem.color;r = tryCall('font-mixer', { cnFont: { family: 'PingFang SC', style: 'Bold' }, enFont: { family: 'Inter', style: 'Regular' }, syncColor: false });check(r.ok && r.parsed.ok === 1 && r.parsed.path === 'dom-fallback', 'fallback honors syncColor: dom path taken');check(noColLayer.textItem.color === colorBefore, 'fallback with syncColor off never touches textItem.color');/* and with syncColor ON the fallback does set it */const colLayer = makeLayer('color fallback layer', [{ from: 0, to: 8, style: styleOf('Inter-Regular', 18, [0.1, 0.2, 0.3]) }]);colLayer.textItem.contents = '混排 24H';mainDoc.activeLayers = [colLayer];mainDoc.activeLayer = colLayer;r = tryCall('font-mixer', { cnFont: { family: 'PingFang SC', style: 'Bold' }, enFont: { family: 'Inter', style: 'Regular' }, syncColor: true, cnColor: { r: 1, g: 0, b: 0 }, enColor: { r: 0, g: 0, b: 0 } });check(r.ok && r.parsed.ok === 1 && r.parsed.path === 'dom-fallback', 'fallback with syncColor on: dom path taken');check(colLayer.textItem.color && colLayer.textItem.color.rgb && colLayer.textItem.color.rgb.red === 255, 'fallback with syncColor on sets textItem.color');PS.throwOnSet = null;mainDoc.activeLayers = [mainLayer];mainDoc.activeLayer = mainLayer;console.log('\n' + (fails === 0 ? 'ALL HOST CHECKS PASSED' : fails + ' HOST CHECK(S) FAILED'));
+/* ============================================================   13. syncColor: optional colour sync for the font mixer   Default off -> only fonts/sizes are written; the original colors   arrive untouched via the copied base style. On -> per-side colors   are applied. The whole-layer DOM fallback honours the switch too.   ============================================================ */function rangeColors(wr) {  return wr.map((x) => (x.style.hasKey(id('color')) ? [x.style.store.get(id('color')).store.get(id('red')), x.style.store.get(id('color')).store.get(id('blue'))] : null));}/* on: colors are written per side */mainLayer.textItem._state.ranges = [{ from: 0, to: 8, style: styleOf('Inter-Regular', 24, [0.1, 0.2, 0.3]) }];r = tryCall('font-mixer', { cnFont: { family: 'PingFang SC', style: 'Bold' }, enFont: { family: 'Inter', style: 'Regular' }, syncColor: true, cnColor: { r: 1, g: 0, b: 0 }, enColor: { r: 0, g: 0, b: 1 } });check(r.ok && r.parsed.ok === 1, 'syncColor on: apply succeeds');checkEq(r.parsed.path, 'canonical', 'syncColor on: canonical path');{  const cs = rangeColors(mainLayer.textItem._state.ranges);  check(cs[0] !== null && cs[0][1] > 0.9, 'syncColor on: EN range got blue');  check(cs[1] !== null && cs[1][0] > 0.9, 'syncColor on: CN range got red');}/* omitted (legacy panel/legacy scheme semantics): original colors kept */mainLayer.textItem._state.ranges = [{ from: 0, to: 8, style: styleOf('Inter-Regular', 24, [0.1, 0.2, 0.3]) }];r = tryCall('font-mixer', { cnFont: { family: 'PingFang SC', style: 'Bold' }, enFont: { family: 'Inter', style: 'Regular' }, cnSize: 30, enSize: 30 });check(r.ok && r.parsed.ok === 1 && r.parsed.path === 'canonical', 'syncColor omitted (legacy): apply succeeds');{  const cs = rangeColors(mainLayer.textItem._state.ranges);  check(cs.length === 2 && cs.every((c) => c && c[0] === 0.1 && c[1] === 0.3), 'syncColor omitted: original colors kept: ' + JSON.stringify(cs));}/* explicitly off: same semantics */mainLayer.textItem._state.ranges = [{ from: 0, to: 8, style: styleOf('Inter-Regular', 24, [0.1, 0.2, 0.3]) }];r = tryCall('font-mixer', { cnFont: { family: 'PingFang SC', style: 'Bold' }, enFont: { family: 'Inter', style: 'Regular' }, syncColor: false });check(r.ok && r.parsed.ok === 1, 'syncColor false: apply succeeds');{  const cs = rangeColors(mainLayer.textItem._state.ranges);  check(cs.every((c) => c && c[0] === 0.1 && c[1] === 0.3), 'syncColor false: original colors kept everywhere: ' + JSON.stringify(cs));}/* the whole-layer DOM fallback must also honour the switch */PS.throwOnSet = 'the command Set is not currently available';const noColLayer = makeLayer('nocolor fallback layer', [{ from: 0, to: 8, style: styleOf('Inter-Regular', 18, [0.1, 0.2, 0.3]) }]);noColLayer.textItem.contents = 'Mix 24H';mainDoc.activeLayers = [noColLayer];mainDoc.activeLayer = noColLayer;const colorBefore = noColLayer.textItem.color;r = tryCall('font-mixer', { cnFont: { family: 'PingFang SC', style: 'Bold' }, enFont: { family: 'Inter', style: 'Regular' }, syncColor: false });check(r.ok && r.parsed.ok === 1 && r.parsed.path === 'dom-fallback', 'fallback honors syncColor: dom path taken');check(noColLayer.textItem.color === colorBefore, 'fallback with syncColor off never touches textItem.color');/* and with syncColor ON the fallback does set it */const colLayer = makeLayer('color fallback layer', [{ from: 0, to: 8, style: styleOf('Inter-Regular', 18, [0.1, 0.2, 0.3]) }]);colLayer.textItem.contents = '混排 24H';mainDoc.activeLayers = [colLayer];mainDoc.activeLayer = colLayer;r = tryCall('font-mixer', { cnFont: { family: 'PingFang SC', style: 'Bold' }, enFont: { family: 'Inter', style: 'Regular' }, syncColor: true, cnColor: { r: 1, g: 0, b: 0 }, enColor: { r: 0, g: 0, b: 0 } });check(r.ok && r.parsed.ok === 1 && r.parsed.path === 'dom-fallback', 'fallback with syncColor on: dom path taken');check(colLayer.textItem.color && colLayer.textItem.color.rgb && colLayer.textItem.color.rgb.red === 255, 'fallback with syncColor on sets textItem.color');PS.throwOnSet = null;
+mainDoc.activeLayers = [mainLayer];
+mainDoc.activeLayer = mainLayer;
+
+/* ---- 14. baseline preservation: superscript must not leak across pieces ---- */
+{
+  const supLayer = makeLayer('sup layer', []);
+  supLayer.textItem._state.text = 'x2ab';
+  const normalStyle = styleOf('Inter-Regular', 18, [0, 0, 0]);
+  normalStyle.store.set(id('baselineDirection'), 'baseline');
+  const supStyle = styleOf('Inter-Regular', 18, [0, 0, 0]);
+  supStyle.store.set(id('baselineDirection'), 'superscript');
+  supLayer.textItem._state.ranges = [
+    { from: 0, to: 1, style: normalStyle },
+    { from: 1, to: 2, style: supStyle },     // the '2' is superscript
+    { from: 2, to: 4, style: normalStyle },
+  ];
+  mainDoc.activeLayers = [supLayer];
+  mainDoc.activeLayer = supLayer;
+  r = tryCall('font-mixer', { cnFont: { family: 'PingFang SC', style: 'Bold' }, enFont: { family: 'Inter', style: 'Regular' } });
+  check(r.ok && r.parsed.ok === 1 && r.parsed.path === 'canonical', 'superscript layer: canonical apply ok');
+  const wr = supLayer.textItem._state.ranges;
+  const dirAt = (k) => { for (const t of wr) if (k >= t.from && k < t.to) return t.style.store.get(id('baselineDirection')); return null; };
+  checkEq(dirAt(0), 'baseline', 'superscript: index 0 keeps baseline');
+  checkEq(dirAt(1), 'superscript', 'superscript: the 2 keeps superscript');
+  checkEq(dirAt(2), 'baseline', 'superscript: text AFTER the sup is NOT superscript');
+  checkEq(dirAt(3), 'baseline', 'superscript: tail keeps baseline');
+}
+mainDoc.activeLayers = [mainLayer];
+mainDoc.activeLayer = mainLayer;
+
+/* ---- 15. multi-selection: targetLayers drives, every text layer gets the mix ---- */
+{
+  const l2 = makeLayer('second text layer', [{ from: 0, to: 4, style: styleOf('Inter-Regular', 18, [0, 0, 0]) }]);
+  l2.textItem._state.text = 'ABcd';
+  PS.targetLayerIds = [mainLayer.id, l2.id];   // true multi-selection (AM path)
+  r = tryCall('font-mixer', { cnFont: { family: 'PingFang SC', style: 'Bold' }, enFont: { family: 'Inter', style: 'Regular' } });
+  if (!(r.ok && r.parsed.ok === 2 && r.parsed.total === 2)) console.log('MULTI DEBUG', JSON.stringify(r.parsed).slice(0, 400));
+check(r.ok && r.parsed.ok === 2 && r.parsed.total === 2, 'multi-select: both layers applied');
+  checkEq(r.parsed.source, 'targetLayers', 'multi-select: used the AM targetLayers path');
+  checkEq(l2.textItem._state.ranges[0].style.getString(id('fontPostScriptName')), 'Inter-Regular', 'multi-select: second layer got the mix too');
+  PS.targetLayerIds = null;
+}
+mainDoc.activeLayers = [mainLayer];
+mainDoc.activeLayer = mainLayer;
+
+/* ---- 16. roman numerals default to the Chinese font (substitution regression) ---- */
+{
+  const rnLayer = makeLayer('roman layer', [{ from: 0, to: 7, style: styleOf('Inter-Regular', 18, [0, 0, 0]) }]);
+  rnLayer.textItem._state.text = '\u246324H\u2160';   // circled 4 + latin + roman I
+  mainDoc.activeLayers = [rnLayer];
+  mainDoc.activeLayer = rnLayer;
+  r = tryCall('font-mixer', { cnFont: { family: 'PingFang SC', style: 'Bold' }, enFont: { family: 'Inter', style: 'Regular' } });
+  check(r.ok && r.parsed.ok === 1, 'roman numerals: apply ok');
+  check(r.parsed.substituted.length === 0, 'roman numerals: no substitution (they ride with the CN font now)');
+  const wrn = rnLayer.textItem._state.ranges;
+  const fontAt2 = (k) => { for (const t of wrn) if (k >= t.from && k < t.to) return t.style.getString(id('fontPostScriptName')); return null; };
+  checkEq(fontAt2(0), 'PingFangSC-Bold', 'circled number gets CN font');
+  checkEq(fontAt2(4), 'PingFangSC-Bold', 'roman I gets CN font');
+  checkEq(fontAt2(1), 'Inter-Regular', 'latin 24H stays EN font');
+}
+mainDoc.activeLayers = [mainLayer];
+mainDoc.activeLayer = mainLayer;
+console.log('\n' + (fails === 0 ? 'ALL HOST CHECKS PASSED' : fails + ' HOST CHECK(S) FAILED'));
 process.exit(fails === 0 ? 0 : 1);
 
 
