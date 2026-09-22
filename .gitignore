@@ -1,0 +1,26 @@
+# ---- 敏感与个人文件（绝不入库）----
+# 自签证书私钥
+cert/
+*.p12
+*.pfx
+
+# 签名工具（Adobe 官方下载，不随仓库分发）
+tools/
+
+# 打包产物（通过 GitHub Release 分发）
+dist/
+
+# 本机调试探针（含个人机器路径）
+audit/probe.jsx
+audit/probe-com.jsx
+audit/probe-result.txt
+audit/audit-result.txt
+
+# 运行期产物
+diag.log
+*.log
+
+# ---- 系统杂项 ----
+Thumbs.db
+.DS_Store
+desktop.ini

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<ExtensionManifest ExtensionBundleId="com.figmatoolbox.ps"
+                   ExtensionBundleVersion="1.6.1"
+                   ExtensionBundleName="盗版PS的工具箱"
+                   Version="9.0">
+  <ExtensionList>
+    <Extension Id="com.figmatoolbox.ps.panel" Version="1.6.1"/>
+  </ExtensionList>
+  <ExecutionEnvironment>
+    <HostList>
+      <!-- PHSP/PHXS：Photoshop。20.0 = PS 2019，99.9 覆盖未来版本 -->
+      <Host Name="PHSP" Version="[20.0,99.9]"/>
+      <Host Name="PHXS" Version="[20.0,99.9]"/>
+    </HostList>
+    <LocaleList>
+      <Locale Code="All"/>
+    </LocaleList>
+    <RequiredRuntimeList>
+      <!-- CEP 9 起（PS 2019 自带），向下兼容宿主的 CEP 10/11 -->
+      <RequiredRuntime Name="CSXS" Version="9.0"/>
+    </RequiredRuntimeList>
+  </ExecutionEnvironment>
+  <DispatchInfoList>
+    <Extension Id="com.figmatoolbox.ps.panel">
+      <DispatchInfo>
+        <Resources>
+          <MainPath>./index.html</MainPath>
+          <ScriptPath>./jsx/host.jsx</ScriptPath>
+          <CEFCommandLine>
+            <Parameter>--allow-file-access</Parameter>
+            <Parameter>--allow-file-access-from-files</Parameter>
+          </CEFCommandLine>
+        </Resources>
+        <Lifecycle>
+          <AutoVisible>true</AutoVisible>
+        </Lifecycle>
+        <UI>
+          <Type>Panel</Type>
+          <Menu>盗版PS的工具箱</Menu>
+          <Geometry>
+            <Size>
+              <Height>920</Height>
+              <Width>400</Width>
+            </Size>
+            <MinSize>
+              <Height>320</Height>
+              <Width>300</Width>
+            </MinSize>
+            <MaxSize>
+              <Height>2160</Height>
+              <Width>1200</Width>
+            </MaxSize>
+          </Geometry>
+        </UI>
+      </DispatchInfo>
+    </Extension>
+  </DispatchInfoList>
+</ExtensionManifest>

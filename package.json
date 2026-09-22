@@ -1,0 +1,11 @@
+{
+  "name": "ps-toolbox",
+  "version": "1.6.1",
+  "private": true,
+  "description": "盗版PS的工具箱 - Photoshop 中英文字体混排 / 符号自动微调 / 方案预设 CEP 插件（PS 2019+）",
+  "scripts": {
+    "test:ps": "python audit/host-lint.py && node audit/test-host-smoke.js && node audit/test-host-optical.js && node audit/test-loader-expr.js && node audit/test-panel-fit.js",
+    "verify:all": "node audit/verify-all.js",
+    "check": "npm run test:ps && npm run verify:all"
+  }
+}

@@ -1,0 +1,1841 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="TgilifIuroSppXD6NQREbl">
+<head data-page-node-id="i5mUrUQ5NNcpBhHuM8JRHn">
+  <meta charset="utf-8" data-page-node-id="cpL4OxieSJBpsJFpymIODv" />
+  <style>
+    /* ============================================================
+       设计语言：暖橙渐变 + 大圆角白卡 + 柔和橙调阴影
+       参考：iPhone 风格信息卡片（橙红 CTA / 黑色胶囊选中 / 浅灰网格底）
+       ============================================================ */
+    :root {
+      /* 强制浅色表单控件：不同系统主题（深色模式 / 高对比）下，
+         未声明的原生控件会被浏览器画成深色，导致输入框、勾选框看不清 */
+      color-scheme: light;
+      --o-1: #FF9161;          /* 橙 · 浅 */
+      --o-2: #FF5A2B;          /* 橙 · 深（主色） */
+      --o-soft: rgba(255, 90, 43, .16);
+      --ink: #1A1A1A;
+      --ink-2: #3D3A38;
+      --ink-3: #8E8A87;
+      --ink-4: #A8A29E;
+      --bg: #F7F5F3;
+      --fill: #F5F2F0;
+      --line: #F0EAE6;
+      --card: #FFFFFF;
+      --r-card: 20px;
+      --r-input: 12px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { height: 100%; }
+
+    body {
+      margin: 0;
+      padding: 0 0 22px;
+      width: 100%;
+      min-height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: 13px;
+      color: var(--ink);
+      -webkit-font-smoothing: antialiased;
+      background-color: var(--bg);
+      background-image:
+        linear-gradient(rgba(0, 0, 0, .035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 0, 0, .035) 1px, transparent 1px);
+      background-size: 26px 26px;
+      overflow-x: hidden;
+    }
+
+    /* 顶部暖橙光晕 */
+    body::before {
+      content: "";
+      position: fixed;
+      top: -110px; left: 50%;
+      transform: translateX(-50%);
+      width: 360px; height: 210px;
+      border-radius: 50%;
+      background: radial-gradient(closest-side, rgba(255, 138, 91, .40), rgba(255, 138, 91, 0) 100%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #E3DDD8; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #D6CFC9; }
+
+    /* ---------- 顶部品牌栏 ---------- */
+    .topbar {
+      position: relative; z-index: 1;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 16px 12px;
+    }
+    .brand { display: flex; align-items: center; gap: 9px; }
+    .logo {
+      width: 30px; height: 30px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--o-1), var(--o-2));
+      box-shadow: 0 7px 15px -6px rgba(255, 90, 43, .70);
+      display: grid; place-items: center;
+      flex: none;
+    }
+    .brand-name { font-size: 14.5px; font-weight: 700; letter-spacing: .2px; }
+    .chip-tag {
+      font-size: 10.5px; font-weight: 700; letter-spacing: .4px;
+      color: var(--o-2);
+      background: rgba(255, 90, 43, .10);
+      border: 1px solid rgba(255, 90, 43, .18);
+      padding: 4px 9px; border-radius: 999px;
+    }
+
+    /* ---------- 分段标签（黑色胶囊选中） ---------- */
+    .seg {
+      position: relative; z-index: 1;
+      display: flex; gap: 4px;
+      margin: 0 14px 12px;
+      padding: 4px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: 0 8px 20px -14px rgba(80, 45, 30, .55);
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 9px 2px;
+      border: none; border-radius: 12px;
+      background: transparent;
+      font-family: inherit; font-size: 12.5px; font-weight: 600;
+      color: var(--ink-3);
+      cursor: pointer;
+      transition: all .2s ease;
+    }
+    .tab-btn.active {
+      background: #1A1A1A;
+      color: #fff;
+      box-shadow: 0 7px 14px -8px rgba(0, 0, 0, .75);
+    }
+
+    /* ---------- 方案选择器（仅字体混排页 · 顶部） ---------- */
+    .preset-bar { position: relative; z-index: 5; margin: 0 0 12px; }
+    .preset-bar.open { z-index: 60; }   /* 展开时抬高，避免被下方卡片内的下拉遮挡 */
+    .preset-trigger {
+      display: flex; align-items: center; gap: 9px;
+      width: 100%;
+      padding: 10px 13px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      cursor: pointer;
+      box-shadow: 0 8px 22px -14px rgba(90, 55, 38, .45);
+      transition: border-color .18s, box-shadow .18s;
+    }
+    .preset-trigger:hover { border-color: #F0D9CE; }
+    .preset-bar.open .preset-trigger { border-color: var(--o-1); box-shadow: 0 0 0 3px var(--o-soft); }
+
+    .preset-ico {
+      width: 20px; height: 20px; border-radius: 7px; flex: none;
+      background: linear-gradient(135deg, var(--o-1), var(--o-2));
+      display: grid; place-items: center;
+      font-size: 11px; color: #fff;
+      box-shadow: 0 4px 9px -4px rgba(255, 90, 43, .70);
+    }
+    .preset-current {
+      flex: 1; min-width: 0; text-align: left;
+      font-size: 13px; font-weight: 600; color: var(--ink-2);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .preset-current.empty { color: var(--ink-4); font-weight: 500; }
+    .preset-caret { color: var(--ink-3); font-size: 13px; flex: none; transition: transform .2s ease; }
+    .preset-bar.open .preset-caret { transform: rotate(180deg); }
+
+    .preset-pop {
+      display: none;
+      position: absolute; top: calc(100% + 7px); left: 0; right: 0;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: 0 22px 50px -24px rgba(80, 45, 30, .55), 0 0 0 1px rgba(0, 0, 0, .02);
+      padding: 8px;
+      z-index: 20;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .preset-pop.open { display: block; animation: pop .16s ease; }
+    @keyframes pop {
+      from { opacity: 0; transform: translateY(-6px) scale(.98); }
+      to   { opacity: 1; transform: none; }
+    }
+    .preset-pop-head {
+      font-size: 10.5px; font-weight: 700; letter-spacing: .4px;
+      color: var(--ink-4); text-transform: uppercase;
+      padding: 3px 8px 8px;
+    }
+    .preset-search { padding: 0 4px 8px; }
+    .preset-search input { font-size: 12.5px; padding: 8px 10px; }
+    .preset-row {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      width: 100%;
+      padding: 10px;
+      border: none; background: transparent; border-radius: 11px;
+      font-family: inherit; font-size: 13px; color: var(--ink-2);
+      text-align: left; cursor: pointer;
+      transition: background .15s;
+    }
+    .preset-row:hover { background: #FFF6F2; }
+    .preset-row.on { background: #FFF1EA; }
+    .preset-row-name {
+      flex: 1; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .preset-row-tip { font-size: 10.5px; color: var(--o-2); font-weight: 700; flex: none; }
+    .preset-row-del {
+      flex: none; width: 20px; height: 20px;
+      display: grid; place-items: center;
+      border-radius: 50%;
+      font-size: 15px; line-height: 1; color: var(--ink-4);
+      cursor: pointer; opacity: 0; transition: all .15s;
+    }
+    .preset-row:hover .preset-row-del { opacity: 1; }
+    .preset-row-del:hover { background: var(--o-2); color: #fff; }
+    .preset-pop-empty {
+      font-size: 12px; color: var(--ink-4); text-align: center;
+      padding: 12px 8px;
+    }
+
+    /* ============================================================
+       通用下拉组件（.dd）：与「方案预设」弹层完全同款
+       用于字体选择 / 描边对齐 —— 所有下拉统一视觉
+       ============================================================ */
+    .dd { position: relative; z-index: 6; }
+    .dd.open { z-index: 60; }   /* 展开时抬高，避免被下方同级下拉的触发条遮挡 */
+    .dd-trigger {
+      display: flex; align-items: center; gap: 9px;
+      width: 100%;
+      padding: 9px 11px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: var(--r-input);
+      cursor: pointer;
+      font-family: inherit; font-size: 13px; color: var(--ink-2);
+      text-align: left;
+      transition: border-color .18s, box-shadow .18s;
+    }
+    .dd-trigger:hover { border-color: #F0D9CE; }
+    .dd.open .dd-trigger { border-color: var(--o-1); box-shadow: 0 0 0 3px var(--o-soft); }
+    .dd-current {
+      flex: 1; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .dd-current.empty { color: var(--ink-4); }
+    .dd-caret { color: var(--ink-3); font-size: 13px; flex: none; transition: transform .2s ease; }
+    .dd.open .dd-caret { transform: rotate(180deg); }
+
+    .dd-pop {
+      display: none;
+      position: absolute; top: calc(100% + 7px); left: 0; right: 0;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: 0 22px 50px -24px rgba(80, 45, 30, .55), 0 0 0 1px rgba(0, 0, 0, .02);
+      padding: 8px;
+      z-index: 30;
+      max-height: 280px;
+      overflow-y: auto;
+    }
+    .dd-pop.open { display: block; animation: pop .16s ease; }
+    /* 窄字段（如描边对齐）右侧对齐展开，并给最小宽度 */
+    .dd-pop.align-right { left: auto; right: 0; min-width: 134px; }
+    /* 面板太矮时改成向上展开（不同分辨率 / 不同面板尺寸的自适应，
+       由 popupFitPlan 在打开与 resize 时计算，见下方脚本） */
+    .dd-pop.flip-up, .preset-pop.flip-up { top: auto; bottom: calc(100% + 7px); }
+    .dd-head {
+      font-size: 10.5px; font-weight: 700; letter-spacing: .4px;
+      color: var(--ink-4); text-transform: uppercase;
+      padding: 3px 8px 8px;
+    }
+    .dd-search { padding: 0 4px 8px; }
+    .dd-search input { font-size: 12.5px; padding: 8px 10px; }
+    .dd-list { display: flex; flex-direction: column; gap: 2px; }
+    .dd-row {
+      display: flex; align-items: center; gap: 8px;
+      width: 100%;
+      padding: 9px 10px;
+      border: none; background: transparent; border-radius: 11px;
+      font-family: inherit; font-size: 13px; color: var(--ink-2);
+      text-align: left; cursor: pointer;
+      transition: background .15s;
+    }
+    .dd-row:hover { background: #FFF6F2; }
+    .dd-row.on { background: #FFF1EA; color: var(--ink); font-weight: 600; }
+    .dd-row-check { margin-left: auto; color: var(--o-2); font-size: 13px; font-weight: 700; flex: none; opacity: 0; }
+    .dd-row.on .dd-row-check { opacity: 1; }
+    .dd-empty { font-size: 12px; color: var(--ink-4); text-align: center; padding: 12px 8px; }
+    /* 字体库条目多，只渲染前若干条；这里提示还有更多，引导用搜索缩小范围 */
+    .dd-more { font-size: 11px; color: var(--ink-4); text-align: center; padding: 8px 6px 4px; border-top: 1px solid #F2ECE7; margin-top: 4px; }
+
+    /* ---------- 内容区 ---------- */
+    .content { position: relative; z-index: 1; padding: 0 14px; }
+    .panel { display: none; }
+    .panel.active { display: block; animation: fade .22s ease; }
+    @keyframes fade {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: none; }
+    }
+
+    /* ---------- 卡片 ---------- */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--r-card);
+      padding: 14px;
+      margin-bottom: 10px;
+      box-shadow: 0 8px 22px -14px rgba(90, 55, 38, .45);
+    }
+    .card-head {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: 700; color: var(--ink-2);
+      letter-spacing: .3px;
+      margin-bottom: 11px;
+    }
+    .lang-title { display:flex; align-items:center; gap:8px; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+    .dot.cn { background: var(--o-2); box-shadow: 0 0 0 3px var(--o-soft); }
+    .dot.en { background: var(--o-2); box-shadow: 0 0 0 3px var(--o-soft); }
+
+    /* ---------- 表单 ---------- */
+    .field { margin-bottom: 10px; }
+    .field:last-child { margin-bottom: 0; }
+    .field.grow { flex: 1; min-width: 0; }
+    .field > label {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 11px; font-weight: 600; color: var(--ink-4);
+      letter-spacing: .3px;
+    }
+    .row { display: flex; gap: 8px; align-items: flex-end; }
+
+    select,
+    input[type="text"],
+    input[type="number"] {
+      width: 100%;
+      padding: 9px 11px;
+      border: none;
+      border-radius: var(--r-input);
+      background-color: var(--fill);
+      font-family: inherit;
+      font-size: 13px;
+      color: var(--ink);
+      outline: none;
+      transition: background .18s, box-shadow .18s;
+      -moz-appearance: textfield;
+    }
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    select {
+      padding-right: 28px; cursor: pointer;
+      appearance: none; -webkit-appearance: none;
+      background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238E8A87' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+    }
+    select:focus,
+    input[type="text"]:focus,
+    input[type="number"]:focus {
+      background-color: #FFF6F2;
+      box-shadow: inset 0 0 0 1.5px var(--o-1);
+    }
+    ::placeholder { color: #BDB8B4; }
+
+    input[type="color"] {
+      width: 46px; height: 38px;
+      flex: none;
+      padding: 3px;
+      border: none;
+      border-radius: var(--r-input);
+      background: var(--fill);
+      cursor: pointer;
+    }
+    input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+    input[type="color"]::-webkit-color-swatch { border: none; border-radius: 9px; }
+
+    /* ---------- 纯色 / 渐变 分段控件（iOS segmented 同款） ---------- */
+    .seg { display: flex; gap: 3px; background: var(--fill); border-radius: 11px; padding: 3px; }
+    .seg-btn {
+      flex: 1; border: 0; padding: 7px 0;
+      background: transparent; border-radius: 9px;
+      font-family: inherit; font-size: 12.5px; color: var(--ink-3);
+      cursor: pointer; transition: background .15s, color .15s;
+    }
+    .seg-btn.on { background: #fff; color: var(--ink); font-weight: 700; box-shadow: 0 1px 3px rgba(26, 26, 26, .10); }
+
+    /* ---------- 渐变编辑器 ---------- */
+    /* 预览条给足高度：径向/菱形/角度的形状差异才看得出来 */
+
+    /* ---------- iOS 式开关（保留原生 checkbox 供 JS 读取 .checked） ---------- */
+    .switch-row {
+      display: flex; align-items: center; gap: 9px;
+      cursor: pointer; user-select: none;
+    }
+    .switch-row input[type="checkbox"] {
+      position: absolute;
+      opacity: 0; width: 0; height: 0; margin: 0;
+    }
+    .sw {
+      position: relative;
+      width: 38px; height: 22px; flex: none;
+      border-radius: 999px;
+      background: #E6E1DD;
+      transition: background .22s ease;
+    }
+    .sw::after {
+      content: "";
+      position: absolute;
+      top: 2.5px; left: 2.5px;
+      width: 17px; height: 17px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, .22);
+      transition: transform .22s cubic-bezier(.4, .1, .3, 1.3);
+    }
+    .switch-row input:checked + .sw { background: linear-gradient(135deg, var(--o-1), var(--o-2)); }
+    .switch-row input:checked + .sw::after { transform: translateX(16px); }
+    .switch-row input:focus-visible + .sw { box-shadow: 0 0 0 3px var(--o-soft); }
+    .sw-txt { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+
+    /* ---------- 滑块 ---------- */
+    input[type="range"] {
+      -webkit-appearance: none; appearance: none;
+      width: 100%; height: 6px;
+      margin: 8px 0;
+      border-radius: 999px;
+      background: #ECE7E3;
+      outline: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 19px; height: 19px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--o-1), var(--o-2));
+      border: 2.5px solid #fff;
+      box-shadow: 0 3px 8px -2px rgba(255, 90, 43, .70);
+      cursor: pointer;
+      transition: transform .15s;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.10); }
+    input[type="range"]:disabled { opacity: .45; }
+
+    /* ---------- 按钮 ---------- */
+    .btn {
+      width: 100%;
+      padding: 11px 14px;
+      border: none; border-radius: 14px;
+      font-family: inherit; font-size: 13px; font-weight: 600;
+      cursor: pointer;
+      transition: all .18s ease;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--o-1), var(--o-2));
+      color: #fff;
+      box-shadow: 0 10px 20px -10px rgba(255, 90, 43, .85);
+      margin-bottom: 10px;
+    }
+    .btn-primary:hover { filter: brightness(1.05); box-shadow: 0 12px 22px -10px rgba(255, 90, 43, .95); }
+    /* 半分按钮：两个可点区域 + 中间分隔符，悬停加亮所在半边 */
+    .btn-split { display: flex; align-items: stretch; padding: 0; overflow: hidden; }
+    .btn-split .half { flex: 1; padding: 11px 6px; cursor: pointer; }
+    .btn-split .half:hover, .btn-split .half:active { background: rgba(255, 255, 255, .14); }
+    .btn-split .sep { display: flex; align-items: center; padding: 0 4px; color: rgba(255, 255, 255, .75); font-weight: 300; user-select: none; pointer-events: none; }
+    .btn-primary:active { transform: translateY(1px) scale(.995); }
+
+    .btn-ghost {
+      width: auto;
+      padding: 5px 11px;
+      border: 1px solid #F5E2D8;
+      border-radius: 10px;
+      background: #fff;
+      color: var(--o-2);
+      font-family: inherit; font-size: 11.5px; font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 3px 8px -5px rgba(80, 45, 30, .55);
+      transition: all .18s ease;
+    }
+    .btn-ghost:hover { background: #FFF7F3; border-color: #FFCDB8; }
+    .btn-ghost:active { transform: translateY(1px); }
+
+    /* ---------- 文本 ---------- */
+    .hint { margin-top: 6px; font-size: 11px; line-height: 1.55; color: var(--ink-4); }
+    .status { min-height: 16px; margin-top: 2px; font-size: 12px; font-weight: 600; color: var(--o-2); text-align: center; }
+    /* 宿主状态条（诊断）：显式可见，不依赖任何弹层 */
+    .status.diag {
+      display: block; min-height: 0; margin: 8px 0 0; padding: 6px 9px;
+      font-size: 11.5px; line-height: 1.5; font-weight: 600; text-align: left;
+      border-radius: 8px; word-break: break-all;
+    }
+    .status.diag.ok { color: #1D7A3E; background: rgba(29, 122, 62, .09); }
+    .status.diag.bad { color: #B3261E; background: rgba(179, 38, 30, .11); cursor: pointer; }
+
+    /* CEP 9/10（PS 2019~2021，Chromium<84）不支持 flex gap，用 margin 回退；
+       PS 2022+（CEP11，Chromium 88+）忽略旧语法自动用 gap —— 两条路径视觉一致 */
+    .seg > .tab-btn + .tab-btn { margin-left: 4px; }
+    .brand > .logo { margin-right: 9px; }
+    .chip-tag { margin-left: 9px; }
+
+    /* 轻量提示条（替代 Figma 主进程 toast） */
+    #toast {
+      position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%) translateY(6px);
+      max-width: 86%; padding: 8px 14px; border-radius: 10px;
+      background: rgba(42, 33, 28, .92); color: #fff;
+      font-size: 12px; line-height: 1.4; text-align: center;
+      opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s;
+      z-index: 999;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  </style>
+</head>
+<body data-page-node-id="mGtn0qUxCwcNGIXj41gxRb">
+  <!-- ============ 品牌栏 ============ -->
+  <header class="topbar" data-page-node-id="DmdD6WjQHUxDThya5mMPtO">
+    <div class="brand" data-page-node-id="ZxUuwcYBVBfsIfTbez4OcM">
+      <span class="logo" data-page-node-id="lpXbU0YSTZIkJcl0YECGTv">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round" data-page-node-id="20PHeIgnFocEKXEH7R02tq">
+          <rect x="3" y="3" width="8" height="8" rx="2.5" data-page-node-id="2npOcQPUE6aI4B7Mx4ApBa" />
+          <rect x="13" y="3" width="8" height="8" rx="2.5" data-page-node-id="sLZOv49OKtVPwtIZXUUeLr" />
+          <rect x="3" y="13" width="8" height="8" rx="2.5" data-page-node-id="nuu9r0jVAK1w2YTpimVuvO" />
+          <rect x="13" y="13" width="8" height="8" rx="2.5" data-page-node-id="dQ13P0M1NTewNKJocqDGy9" />
+        </svg>
+      </span>
+      <span class="brand-name" data-page-node-id="mJYtsynAzGg8yG9mqtafNX">盗版PS的工具箱</span>
+    </div>
+    <span class="chip-tag" data-page-node-id="pVllz5BCWHrjqrGhNGDxBo">2 IN 1</span>
+  </header>
+
+  <!-- ============ 标签切换 ============ -->
+  <nav class="seg" data-page-node-id="x7Fo7E8k0SB271oQrhcP8q">
+    <button class="tab-btn active" data-tab="font" data-page-node-id="lh3mOL8qhU6ouMRcfS1nhi">字体混排</button>  </nav>
+
+  <main class="content" data-page-node-id="DP0Xy7US4buvF9MEtGVkm6">
+    <!-- ============ ① 字体混排 ============ -->
+    <section class="panel active" id="font" data-page-node-id="T869DRNyX4vuL4PUq2OAza">
+      <!-- 方案选择器：仅字体混排功能拥有 -->
+      <div class="preset-bar" id="preset-bar" data-page-node-id="wBPaEjf6MuGBOqZOHoY0vQ">
+        <div class="preset-trigger" id="preset-trigger" data-page-node-id="mqvmpDot2exreMEB6d8GGU">
+          <span class="preset-ico" data-page-node-id="k9XDUtAHwpQ9o9GTpBJVPF">◆</span>
+          <span class="preset-current empty" id="preset-current" data-page-node-id="eqzBdKcIAg1vifdbyAZq3w">未选择方案</span>
+          <span class="preset-caret" data-page-node-id="2vHIGfVdZtfij9YF0LePgi">⌄</span>
+        </div>
+        <div class="preset-pop" id="preset-pop" data-page-node-id="83LcVZXaeTQvFgSWr7aaBX">
+          <div class="preset-pop-head" data-page-node-id="32XStsT6uyOIXWQd7puQxx">字体混排方案</div>
+          <div class="preset-search" data-page-node-id="IBCcM4ydfI2U1WxdBqvBLH"><input type="text" id="preset-search" placeholder="搜索方案…" data-page-node-id="OnOqAzrF8FWq3ZmQp8Jaw4" /></div>
+          <div id="preset-pop-list" data-page-node-id="s3uFANcpLn6ZHSjz1wojYl"></div>
+          <div class="preset-pop-empty" id="preset-pop-empty" style="display:none" data-page-node-id="4KvgKBMZpMZukwNwyzEAMF">暂无方案，在下方保存一个</div>
+        </div>
+      </div>
+
+      <div class="status" id="host-status"></div>
+
+      <div class="card" data-page-node-id="fTFDw4xiKJcAtnY7PhhPGC">
+        <div class="card-head" data-page-node-id="SvAAbqnrdcJbydKlFuBJQT"><span class="dot cn" data-page-node-id="jDJeCWDVryzUERlZfljamX"></span>中文</div>
+        <div class="field" data-page-node-id="8JniWzZr2M3XijmLNCxlZX">
+          <label data-page-node-id="3zQxF4nq2VNjcZk2BW7AyS">字体</label>
+          <div class="dd" data-target="cn-font" data-placeholder="选择字体…">
+            <button type="button" class="dd-trigger">
+              <span class="dd-current empty">选择字体…</span>
+              <span class="dd-caret">⌄</span>
+            </button>
+            <div class="dd-pop">
+              <div class="dd-head">中文字体</div>
+              <div class="dd-search"><input type="text" placeholder="搜索字体…"></div>
+              <div class="dd-list"></div>
+              <div class="dd-empty" style="display:none">无匹配字体</div>
+            </div>
+          </div>
+          <select id="cn-font" data-page-node-id="qb30phlXOmzDTe75CRJ6dO" style="display:none"></select>
+        </div>
+        <div class="row" data-page-node-id="A7dDG9yloWKawGQQXXx67k">
+          <div class="field grow" data-page-node-id="SbLDVbRP3E4WFBlDuDHNjR">
+            <label data-page-node-id="ctEXRaYLC318MplftKFCfn">字号</label>
+            <input type="number" id="cn-size" placeholder="如 14，留空不改" data-page-node-id="0zlqaZhVRmQVNYDrRIHiWx" />
+          </div>
+          <div class="field" data-page-node-id="GF37ISo8J8SEG1sndqV3l0">
+            <label data-page-node-id="2IBcWBRLInPEpvqA5FWnzA">字色</label>
+            <input type="color" id="cn-color" value="#000000" data-page-node-id="86ZKluwVulGNFq6vHsMGxd" />
+          </div>
+        </div>
+      </div>
+
+      <div class="card" data-page-node-id="h68brhrpkutEVZpZFFAe7I">
+        <div class="card-head" style="display:flex;align-items:center;justify-content:space-between" data-page-node-id="OHbNMT9E012hFuj2odwciv"><span class="lang-title"><span class="dot en" data-page-node-id="jIF2AF8GGfPkgYEOKG1dH7"></span>英文</span><span style="display:flex;align-items:center;gap:5px"><label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--muted);cursor:pointer" title="勾选后：把行间距设为 Photoshop 的「自动」；不勾选则完全不碰行间距"><input id="kerning-leading" type="checkbox" checked style="width:13px;height:13px;margin:0"/><span>行距自动</span></label><label style="display:flex;align-items:center;gap:2px;font-size:11px;color:var(--muted)"><input id="kerning-outer" type="number" value="-45" step="1" style="width:48px;padding:5px 4px;text-align:center"/><span>%</span></label><button class="btn-ghost" id="kerning-apply" style="padding:5px 10px;font-size:11px">自动微调</button></span></div><div class="status" id="kerning-status"></div>
+        <div class="field" data-page-node-id="pix27OwA2SVYSuEgOuH2gJ">
+          <label data-page-node-id="AaPEWEFKDmEP5rQP9ilIou">字体</label>
+          <div class="dd" data-target="en-font" data-placeholder="选择字体…">
+            <button type="button" class="dd-trigger">
+              <span class="dd-current empty">选择字体…</span>
+              <span class="dd-caret">⌄</span>
+            </button>
+            <div class="dd-pop">
+              <div class="dd-head">英文字体</div>
+              <div class="dd-search"><input type="text" placeholder="搜索字体…"></div>
+              <div class="dd-list"></div>
+              <div class="dd-empty" style="display:none">无匹配字体</div>
+            </div>
+          </div>
+          <select id="en-font" data-page-node-id="nyKL6JgsniKsoHk72pGoVw" style="display:none"></select>
+        </div>
+        <div class="row" data-page-node-id="FOjFCKY7V9B4qFxx93vsyz">
+          <div class="field grow" data-page-node-id="jQc8LhAHWWUYGV0QwOQvhH">
+            <label data-page-node-id="JL2lAhW5hU9WVbczp58KT0">字号</label>
+            <input type="number" id="en-size" placeholder="如 12，留空不改" data-page-node-id="RovLYRJwyLzwk5aKmFQoQp" />
+          </div>
+          <div class="field" data-page-node-id="l4FJjV3CvQQyAXPPeJgJhA">
+            <label data-page-node-id="E8jgoRNeXXIVtM7h3Dse2C">字色</label>
+            <input type="color" id="en-color" value="#000000" data-page-node-id="3GpxfbLsTeVXqejgeFvwEg" />
+          </div>
+        </div>
+      </div>
+
+      <!-- 半分按钮：左 = 应用字体混排与颜色，右 = 只应用字体混排（不改颜色） -->
+      <button class="btn btn-primary btn-split" id="font-apply"><span class="half" id="font-apply-color" title="应用字体混排，并按左/右侧的字色设置文字颜色">应用字体混排与颜色</span><span class="sep" aria-hidden="true">|</span><span class="half" id="font-apply-nocolor" title="应用字体混排（只改字体/字号），完全保留原文字颜色">应用字体混排</span></button>
+      <div class="status" id="font-status"></div>
+
+      <div class="card" data-page-node-id="ofyJgVCAT90A3HfYDY29ER">
+        <div class="card-head" data-page-node-id="qk707xjfSulLDsR5xwFohE">方案管理</div>
+        <div class="row" style="margin-bottom: 10px" data-page-node-id="b5ijvPKphxRPa4R3566ISi">
+          <div class="field grow" style="margin-bottom: 0" data-page-node-id="gBHVsznLnm7sJBcFw3wKFU">
+            <input type="text" id="preset-name" placeholder="新方案名，如 中文正文" data-page-node-id="9mWkDwkCVAvSTG32SBy9Mj" />
+          </div>
+          <button class="btn-ghost" id="preset-save" data-page-node-id="IAYHEtu3x6uJentodvlKGP">保存为方案</button>
+        </div>
+        <div class="row" style="gap: 7px" data-page-node-id="dm5dMFpzXpWhcjR7TI1nE0">
+          <button class="btn-ghost" id="preset-import-btn" data-page-node-id="DmAx6JU2BBzBZI3TmfKo02">导入方案</button>
+          <button class="btn-ghost" id="preset-export" data-page-node-id="sVsxwjLoR9H5Uo6kzuorDR">导出全部</button>
+          <input type="file" id="preset-import" accept="application/json" style="display: none" data-page-node-id="ZECX5qfBgdNey1XFFOWwHT" />
+        </div>
+        <div class="hint" data-page-node-id="a9avpmWwttFoefmoIVDp6U">在上方「方案」下拉选预设 → 本页微调 → 点「应用字体混排」生效。预设保存在插件本地存储，关掉再开仍在，全程不联网。</div>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="js/CSInterface.js"></script>
+  <script>
+    const $ = (s) => document.querySelector(s);
+    let activeTab = 'font';   // 当前激活标签页，用于决定「识别」读哪类节点
+    const ddRegistry = {};    // 通用下拉组件实例表，按目标 select 的 id 索引
+    const fontSel = { cn: null, en: null };   // 中/英文字体的真实取值状态（方案保存以它为准）
+    // 字体混排的等待守卫：主进程若长时间不回包（例如字体加载卡住），
+    // 必须主动告诉用户，否则状态栏会永远停在「应用中…」，看起来就是按钮坏了。
+    let fontGuard = null;
+
+    // 收起所有弹层（方案预设 / 通用下拉）
+    function closeAllPickers() {
+      closePresetPop();
+      document.querySelectorAll('.dd.open').forEach((el) => el.classList.remove('open'));
+      document.querySelectorAll('.dd-pop.open').forEach((el) => el.classList.remove('open'));
+    }
+
+    /* ============================================================
+       弹层自适应（不同分辨率 / 不同 Photoshop 面板尺寸）
+       ------------------------------------------------------------
+       manifest 允许面板被拖到很小（MinSize 300×320），也能拉到很大。
+       弹层 CSS 默认向下展开，下方装不下时就会被面板视口裁掉（列表看不全、
+       甚至完全看不到）。这里按真实可用空间决定向上还是向下，并收紧
+       max-height；字段比弹层还窄时右对齐。
+       popupFitPlan 是纯函数，离线单测见 audit/test-panel-fit.js。
+       ============================================================ */
+    const POP_GAP = 7;    // 弹层与触发条之间的间距（需与 CSS 一致）
+    const POP_PAD = 8;    // 视口边缘留白
+    const POP_MIN_H = 96; // 再挤也要留出这么高，否则上层改成滚动
+
+    function popupFitPlan(trigger, vw, vh, designMax, designMinW) {
+      const below = vh - trigger.bottom - POP_GAP - POP_PAD;
+      const above = trigger.top - POP_GAP - POP_PAD;
+      // 下方能放下完整高度就不动；放不下时哪边宽裕往哪边翻
+      // （宁可上翻显示完整列表，也不要把列表压成一两行）
+      const flip = (below < designMax) && (above > below);
+      const space = flip ? above : below;
+      const maxHeight = Math.max(POP_MIN_H, Math.min(designMax, Math.round(space)));
+      const alignRight = !!designMinW && (trigger.width + 2 * POP_PAD < designMinW);
+      return { flip: flip, maxHeight: maxHeight, alignRight: alignRight, clipped: space < POP_MIN_H };
+    }
+
+    function fitPopup(pop, trigger, designMax, designMinW) {
+      if (!pop || !trigger) return null;
+      const t = trigger.getBoundingClientRect();
+      const plan = popupFitPlan(t, window.innerWidth, window.innerHeight, designMax, designMinW);
+      pop.classList.toggle('flip-up', plan.flip);
+      pop.classList.toggle('align-right', plan.alignRight);
+      pop.style.maxHeight = plan.maxHeight + 'px';
+      return plan;
+    }
+
+    // 面板尺寸变化时（用户拖拽 / 换显示器 / 换分辨率）重新适配已打开的弹层
+    function refitOpenPops() {
+      document.querySelectorAll('.dd-pop.open').forEach((pop) => {
+        const root = pop.closest ? pop.closest('.dd') : null;
+        const trigger = root ? root.querySelector('.dd-trigger') : null;
+        if (trigger) fitPopup(pop, trigger, 280, 220);
+      });
+      const ppop = document.querySelector('.preset-pop.open');
+      if (ppop) fitPopup(ppop, document.querySelector('#preset-bar'), 300, 0);
+    }
+    window.addEventListener('resize', refitOpenPops);
+
+    // ---- 标签页切换 ----
+    document.querySelectorAll('.tab-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(btn.dataset.tab).classList.add('active');
+        activeTab = btn.dataset.tab;
+        closeAllPickers();
+        detectActive();   // 切到对应页时，自动识别当前选中图层并回填表单
+        requestResize();  // 切页后让面板高度贴合当前页内容
+      });
+    });
+
+    // ---- 与 Photoshop 宿主通信（CEP evalScript 桥接） ----
+    // 消息形状与 Figma 版完全一致：send(msg) 发出请求，handleHostMsg(msg) 处理回包。
+    // CSInterface.js 缺失/损坏时不要连累整个面板：构造失败就降级为无宿主模式
+    let cs = null;
+    try { cs = new CSInterface(); } catch (e) { cs = null; }
+
+
+    // ---- 颜色调整：调用 Photoshop 原生拾色器（CEP 环境拦截色块点击） ----
+    // 所有 input[type=color]（中英文字色/填充/描边/阴影/渐变色标）统一走 PS 调色窗口；
+    // 浏览器预览环境不拦截，仍用系统色板。
+    function openPsPicker(input) {
+      const cur = hexToRgb(input.value || '#000000');
+      callHost('pick-color', { r: cur.r, g: cur.g, b: cur.b }, (r) => {
+        if (r && r.ok) {
+          input.value = rgbToHex({ r: r.r, g: r.g, b: r.b });
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        } else if (r && r.error) {
+          figmaNotify('拾色器不可用：' + r.error);
+        }
+      });
+    }
+    if (window.__adobe_cep__) {
+      document.addEventListener('mousedown', (e) => {
+        const t = e.target;
+        if (t && t.type === 'color') { e.preventDefault(); openPsPicker(t); }
+      }, true);
+      document.addEventListener('click', (e) => {
+        const t = e.target;
+        if (t && t.type === 'color') e.preventDefault();
+      }, true);
+    }
+
+    // ============================================================
+    // 宿主桥：确保 ExtendScript 宿主（jsx/host.jsx）真的可用
+    // ------------------------------------------------------------
+    // "EvalScript error." 有两类成因：宿主文件没被 CEP 载入（顶层 var
+    // 落在非全局作用域，面板调用时找不到这个名字），或者宿主侧抛异常。
+    // 这里不再依赖 CEP 的 ScriptPath 自动加载：探测不到就把 jsx 文件
+    // 自己 eval 进引擎并显式挂到 $.global，随后重试原调用。
+    // 所有结果同步写进扩展目录的 diag.log，离线也能看到真实报错。
+    // ============================================================
+
+    const CEP = !!(window.__adobe_cep__ && cs);   // 浏览器预览时为 false，宿主调用自动降级
+    function evalScript(script, cb) {
+      if (!CEP) { if (cb) cb(''); return; }
+      try { cs.evalScript(script, cb); } catch (e) { if (cb) cb(''); }
+    }
+
+    // 面板期望的宿主版本：与 jsx/host.jsx 的 HOST_VERSION 一致。
+    // 用于发现「PS 启动时 ScriptPath 已加载旧版宿主」并强制重载，无需重启 Photoshop。
+    const HOST_EXPECT = '4.3.1';
+    const EXT_DIR = (() => {
+      try { return cs.getSystemPath(SystemPath.EXTENSION) || ''; } catch (e) { return ''; }
+    })();
+
+    // 往 <扩展目录>/diag.log 追加一行（纯 evalScript，不依赖宿主可用）
+    function diagLog(tag, msg) {
+      if (!window.__adobe_cep__ || !EXT_DIR) return;
+      const line = new Date().toTimeString().slice(0, 8) + ' [' + tag + '] ' + msg;
+      const jsx = '(function(){try{var f=new File(' + JSON.stringify(EXT_DIR + '/diag.log') + ');' +
+        'f.encoding="UTF-8";if(f.open("a")){f.writeln(' + JSON.stringify(line) + ');f.close();}}catch(e){}})()';
+      try { evalScript(jsx, () => {}); } catch (e) {}
+    }
+
+    // 读取并执行宿主文件，成功后显式发布到 ExtendScript 全局对象。
+    // 返回字符串状态；失败时带上真实行号 + 出错行原文。
+    function hostLoaderExpr(wantVersion) {
+      const jsxPath = EXT_DIR + '/jsx/host.jsx';
+      const want = String(wantVersion || HOST_EXPECT);
+      return '(function(){' +
+        'function pick(){try{if(typeof cephostDispatch==="function")return cephostDispatch;}catch(e){}' +
+        'try{if($.global&&$.global.cephostDispatch)return $.global.cephostDispatch;}catch(e){}return null;}' +
+        'var cur=pick();' +
+        // 精确比对 ping 回包（ES3 环境没有 Array.indexOf；String.indexOf 虽然可用，
+        // 但这里改成整串相等更直观：回包形状一变就重载一次宿主，行为仍安全）
+        'if(cur){try{if(String(cur("ping",""))===' + JSON.stringify(JSON.stringify({ pong: true, version: want })) + ')return "ALREADY";}catch(e){}}' +
+        'var f=new File(' + JSON.stringify(jsxPath) + ');' +
+        'if(!f.exists)return "ERR missing-file "+f.fsName;' +
+        'var src=null;var encs=["UTF-8","UTF8","BINARY"];' +
+        'for(var i=0;i<encs.length;i++){try{f.encoding=encs[i];if(f.open("r")){src=f.read();f.close();}if(src!==null&&src.length)break;}catch(er){try{f.close();}catch(er2){}}}' +
+        'if(src===null)return "ERR read-failed "+f.error;' +
+        'if(src.charCodeAt(0)===65279)src=src.substring(1);' +
+        'var head="";for(var h=0;h<6;h++)head+=src.charCodeAt(h)+",";' +
+        'try{eval(src);}catch(e){var arr=src.split("\\n");var bad=arr[e.line-1]||"";' +
+        'return "ERR eval line="+e.line+" msg="+e.message+" | "+bad.substring(0,110);}' +
+        'try{if(typeof cephostDispatch!=="function")return "ERR not-a-function head="+head;' +
+        '$.global.cephostDispatch=cephostDispatch;}catch(e){return "ERR global-set "+e.message;}' +
+        'return "LOADED head="+head;' +
+        '})()';
+    }
+
+    let hostReady = false, hostBusy = false, hostTried = false, hostErr = '', lastCallErr = '';
+    let hostWaiters = [];
+    const loggedOnce = {};   // 每种 API 只记一次原始回包，避免刷屏
+    let writeProbed = false;  // 写入自检只跑一次
+    function ensureHost(cb) {
+      if (!CEP) return;
+      if (hostReady) { if (cb) cb(true); return; }
+      if (hostTried && !hostBusy) { if (cb) cb(false); return; }
+      if (cb) hostWaiters.push(cb);
+      if (hostBusy) return;
+      hostBusy = true; hostTried = true;
+      diagLog('host', 'probe start ext=' + EXT_DIR);
+      evalScript('typeof cephostDispatch', (t) => {
+        diagLog('host', 'typeof cephostDispatch = ' + t);
+        if (t === 'function') {
+          // 宿主已在 → 先核对版本（PS 启动时 ScriptPath 可能加载的是旧版宿主）
+          callHost('ping', null, (pg) => {
+            diagLog('host', 'ping -> ' + JSON.stringify(pg));
+            const ver = (pg && pg.version) || '';
+            if (ver !== HOST_EXPECT) {
+              diagLog('host', '版本不符 running=' + ver + ' expect=' + HOST_EXPECT + ' → 强制重载宿主');
+              reloadHost();
+              return;
+            }
+            callHost('diag', null, (dg) => {
+              diagLog('host', 'env -> ' + JSON.stringify(dg));
+              finishHost(true, 'ScriptPath 已加载，宿主 v' + ver);
+            }, true);
+          }, true);
+          return;
+        }
+        reloadHost();
+      });
+    }
+    // 把 jsx 读进引擎并挂到 $.global，随后 ping 一次确认手上的就是新宿主
+    function reloadHost() {
+      evalScript(hostLoaderExpr(HOST_EXPECT), (res) => {
+        diagLog('host', 'loader -> ' + res);
+        const r = String(res);
+        if (r !== 'LOADED' && r !== 'ALREADY') { finishHost(false, r); return; }
+        callHost('ping', null, (pg) => {
+          const ver = (pg && pg.version) || '?';
+          diagLog('host', 'ping after load -> ' + JSON.stringify(pg));
+          finishHost(ver === HOST_EXPECT, '宿主 v' + ver +
+            (ver === HOST_EXPECT ? '（' + r + '）' : ' 版本不符，期望 ' + HOST_EXPECT + '（' + r + '）'));
+        }, true);
+      });
+    }
+    function finishHost(ok, info) {
+      hostReady = ok; hostBusy = false; hostErr = ok ? '' : info;
+      const el = document.getElementById('host-status');
+      if (el) {
+        el.className = 'status diag ' + (ok ? 'ok' : 'bad');
+        el.textContent = ok
+          ? '宿主已连接（通信正常）'
+          : ('宿主加载失败：' + info + '  —  点这里重试，详情见扩展目录 diag.log');
+      }
+      diagLog('host', (ok ? 'READY ' : 'FAIL ') + info);
+      if (ok) hostSelfTest();
+      if (!ok) figmaNotify('宿主加载失败：' + info);
+      const waiters = hostWaiters; hostWaiters = [];
+      waiters.forEach((fn) => { try { fn(ok); } catch (e) {} });
+    }
+    // ---- 宿主自检（真机证据，不是推断）----
+    // 在临时文档里用「生产路径」把两个不同字体写进两段并回读校验：
+    // 结果直接写进 diag.log，并显示在状态条上。用户文档完全不受影响。
+    let selfTested = false;
+    function hostSelfTest() {
+      if (selfTested || !CEP || !hostReady) return;
+      selfTested = true;
+      const args = {};
+      if (fontSel.cn && fontSel.cn.family) args.cnFont = fontSel.cn;
+      if (fontSel.en && fontSel.en.family) args.enFont = fontSel.en;
+      diagLog('selftest', 'start ' + JSON.stringify(args));
+      callHost('selftest', args, (st) => {
+        diagLog('selftest', JSON.stringify(st).slice(0, 700));
+        const steps = (st && st.steps) || [];
+        const has = (s) => steps.indexOf(s) >= 0;
+        const wrote = has('write=ok');
+        const verified = has('verify=ok') || has('verify=ok-secondary');
+        const okWrite = wrote && verified;
+        const sizeOk = has('size=ok');
+        // 请求的那对字体因缺字形被 PS 替换、改用稳健字体又验过：算通过，但要说明
+        const subWarn = (has('verify=substituted') && verified)
+          ? '（你选的那对字体在样例字符上被 PS 替换，已用 ' + ((st && st.robust) || '') + ' 验证通过）' : '';
+        const el = document.getElementById('host-status');
+        if (el && hostReady) {
+          el.className = 'status diag ' + (okWrite ? 'ok' : 'bad');
+          el.textContent = okWrite
+            ? ('宿主已连接 · 自检：分段写入 OK，' +
+               (sizeOk ? ('字号 OK（' + st.sizeMode + '）') : ('但分段字号不可用：' + ((st && st.sizeSteps) || ''))) + subWarn)
+            : ('宿主已连接 · 自检未通过：' + (st && st.error ? st.error : steps.join(' ')) + '  —  详情见扩展目录 diag.log');
+        }
+      }, true);
+    }
+
+    // 点击状态行 = 手动重试一次加载（改完 jsx 文件后无需重启 PS）
+    const hostStatusEl = document.getElementById('host-status');
+    if (hostStatusEl) {
+      hostStatusEl.addEventListener('click', () => {
+        // 宿主已连接时：点一下 = 重跑一次自检（改了 jsx 后不必重启面板）
+        if (hostReady) { selfTested = false; hostSelfTest(); return; }
+        hostTried = false; hostErr = '';
+        ensureHost();
+      });
+    }
+
+    function hostCallExpr(type, enc) {
+      // 优先用面板亲手挂到 $.global 的那份（可能是刚重载的新版宿主），再退回 ScriptPath 加载的
+      return '(function(){var f=null;' +
+        'try{if($.global&&$.global.cephostDispatch)f=$.global.cephostDispatch;}catch(e){}' +
+        'if(!f){try{if(typeof cephostDispatch==="function")f=cephostDispatch;}catch(e){}}' +
+        'if(!f)return "__NOHOST__";' +
+        'return f(' + JSON.stringify(type) + ',' + JSON.stringify(enc) + ');})()';
+    }
+
+    function callHost(type, args, cb, noRetry) {
+      if (!CEP) { setTimeout(() => { if (cb) cb({}); }, 0); return; }   // 预览：异步模拟 CEP 回包时序，避免 TDZ
+      const enc = args ? encodeURIComponent(JSON.stringify(args)) : '';
+      evalScript(hostCallExpr(type, enc), (res) => {
+        let data = null;
+        try { data = JSON.parse(res); } catch (e) { data = { error: String(res) }; }
+        const needHeal = (res === '__NOHOST__') || (res === 'EvalScript error.' && !hostReady);
+        if (needHeal && !noRetry) {
+          diagLog('call', type + ' -> 宿主不可用(' + res + ')，尝试现场加载');
+          ensureHost((ok) => {
+            if (ok) callHost(type, args, cb, true);
+            else if (cb) cb({ error: hostErr || '宿主未加载' });
+          });
+          return;
+        }
+        if (!loggedOnce[type]) {
+          loggedOnce[type] = true;
+          diagLog('reply', type + ' -> ' + String(res).slice(0, 600));
+        }
+        if (data && data.failed && data.failed.length) {
+          const f0 = data.failed[0] || {};
+          diagLog('failed', type + ' -> ' + JSON.stringify({
+            name: f0.name, reason: f0.reason, stage: f0.stage, line: f0.line, trace: f0.trace, forms: f0.forms,
+          }));
+          // 首次失败时自动做一次写入自检：在临时文本图层上逐项隔离，用完即删
+          if (type === 'font-mixer' && !writeProbed) {
+            writeProbed = true;
+            diagLog('probe', 'font-mixer 失败 → 运行写入自检（临时文档，用完删除）');
+            callHost('selftest', null, (pw) => {
+              diagLog('probe', 'steps -> ' + JSON.stringify(pw));
+            }, true);
+          }
+        }
+        if (data && data.error && data.error !== lastCallErr) {
+          lastCallErr = data.error;
+          const where = (data.api || data.stage)
+            ? ' [api=' + (data.api || '?') + ' stage=' + (data.stage || '?') + ' line=' + (data.line === undefined ? '?' : data.line) + ']'
+            : '';
+          diagLog('call', type + ' -> ' + data.error + where);
+        }
+        if (cb) cb(data);
+      });
+    }
+
+    setTimeout(() => ensureHost(), 200);
+
+    // CEP 没有主动推送：选区变化用轮询签名模拟（与 Figma 版 selection-changed 等效）
+    let lastSelSig = '';
+    function pollSelection() {
+      if (!hostReady) return;   // 宿主不可用时不要每 500ms 空转
+      callHost('sel-sig', null, (r) => {
+        const sig = (r && r.sig) || '';
+        if (sig !== lastSelSig) {
+          const first = !lastSelSig;   // 首次只记录，不触发识别
+          lastSelSig = sig;
+          if (!first) detectActive();
+        }
+      });
+    }
+    setInterval(pollSelection, 500);
+
+    function send(msg) {
+      switch (msg.type) {
+        case 'resize':
+          // CEP 面板高度由 Photoshop 管理，无需贴合；仅滚动到底部确保可见
+          break;
+        case 'notify':
+          alert(String(msg.msg || ''));
+          break;
+        case 'list-fonts':
+          callHost('list-fonts', null, (r) => {
+            applyFontList(r && r.families ? { families: r.families } : { families: [], error: r && r.error });
+          });
+          break;
+        case 'storage-load':
+          // 延迟到脚本执行完毕后再回填：applyStoredPresets 依赖下方 let/const，
+          // 同步调用会触发 TDZ 崩溃并截断后续全部控件绑定
+          setTimeout(function () { applyStoredPresets(readPresets()); }, 0);
+          break;
+        case 'storage-save':
+          writePresets(msg.data || {});
+          break;
+        case 'detect-font':
+          callHost('detect-font', null, (r) => {
+            if (r && r.error) {
+              const st = $('#font-status');
+              if (st) st.textContent = '识别失败：' + r.error + (r.stage ? '（' + r.stage + '）' : '');
+              return;
+            }
+            handleHostMsg({ type: 'detect-font-result', ...r });
+          });
+          break;
+        case 'font-mixer':
+          handleHostMsg({ type: 'font-mixer-start', total: 0 });
+          callHost('font-mixer', msg.config, (r) => { handleHostMsg({ type: 'font-mixer-done', ...r }); });
+          break;
+        case 'auto-kerning':
+          // setLeading 默认 true（未传时按开启处理），传 false 就不碰行间距
+          callHost('auto-kerning', { pairedOuterValue: msg.pairedOuterValue, setLeading: msg.setLeading !== false }, (r) => {
+            handleHostMsg({ type: 'auto-kerning-done', ...r });
+          });
+          break;
+      }
+    }
+
+    // 统一回包处理（与 Figma 版 window.onmessage 逻辑相同）
+    function handleHostMsg(msg) {
+      if (msg.type === 'detect-font-result') fillFontFromDetect(msg);
+      if (msg.type === 'font-mixer-start') onFontMixStart(msg);
+      if (msg.type === 'font-mixer-done') showFontMixResult(msg);
+      if (msg.type === 'auto-kerning-done') showKerningResult(msg);
+      if (msg.type === 'storage-data') applyStoredPresets(msg.data);
+    }
+
+    // ---- 预设持久化：CEP 面板可用 localStorage（有真实 origin，非 data: URL） ----
+    function readPresets() {
+      try {
+        return {
+          fontPresets: JSON.parse(localStorage.getItem('pstoolbox-fontPresets') || '[]'),
+        };
+      } catch (e) { return { fontPresets: [] }; }
+    }
+    function writePresets(data) {
+      try {
+        localStorage.setItem('pstoolbox-fontPresets', JSON.stringify(data.fontPresets || []));
+      } catch (e) { }
+    }
+
+    function requestResize() {
+      // CEP 面板由 Photoshop 窗口管理器控制尺寸；保留函数避免调用点报错
+    }
+
+    // 识别选中图层不依赖字体库 → 立刻发出（与 Figma 版一致的启动时序）
+    detectActive();
+    send({ type: 'storage-load' });   // 从 localStorage 读回已保存的方案
+    setTimeout(requestFontList, 0);   // 异步拉取字体库（Photoshop app.fonts）
+    requestResize();
+
+    $('#kerning-apply').addEventListener('click', () => {
+      $('#kerning-status').textContent = '处理中…';
+      const lead = $('#kerning-leading');
+      send({
+        type: 'auto-kerning',
+        pairedOuterValue: (numInput($('#kerning-outer')) === null ? -45 : numInput($('#kerning-outer'))),
+        setLeading: !lead || lead.checked,     // 勾选才设行间距「自动」
+      });
+    });
+    // 勾选状态持久化：关掉面板再打开仍保持上次的选择
+    (() => {
+      const box = $('#kerning-leading');
+      if (!box) return;
+      const saved = lsRead('ps-toolbox-kerning-leading');
+      if (saved === false) box.checked = false;
+      box.addEventListener('change', () => { lsWrite('ps-toolbox-kerning-leading', !!box.checked); });
+    })();
+
+    // 主进程回传的持久化方案：以它为准覆盖内存态并重绘
+    function applyStoredPresets(data) {
+      const d = data || {};
+      if (Array.isArray(d.fontPresets)) {
+        fontPresets = d.fontPresets;
+        lsWrite(PK, fontPresets);
+        renderPresetPop();
+      }
+    }
+
+    // 按当前标签页，请求主进程识别选中的图层
+    function detectActive() {
+      if (activeTab === 'font') send({ type: 'detect-font' });
+    }
+
+    // 把识别到的文本图层字体混排回填到表单（同时重置方案态，保存即存为新方案）
+    // 守卫：用户已选中预设方案时，识别结果不得覆盖表单 ——
+    // 预设是显式意图，优先级高于任何自动识别；否则启动识别晚到 / 选区变化
+    // 都会把刚选好的预设悄悄冲掉，表现为「点了预设但不生效」。
+    // 想恢复识别回填：在方案下拉里再次点击「当前」方案行即可取消选择。
+    // 用户手动编辑过的字段，不再被「识别回填」覆盖。
+    // 识别是选区变化触发的（轮询），不设这道闸的话，你刚输入的字号/颜色会被
+    // 下一次识别悄悄冲回原值 —— 表现出来就是「字号改不了」。
+    const userTouched = {};
+    const TOUCH_TRACKED = ['#cn-size', '#en-size', '#cn-color', '#en-color'];
+    function markTouched() {
+      TOUCH_TRACKED.forEach((sel) => {
+        const el = $(sel);
+        if (el && !el.__touchBound) {
+          el.__touchBound = true;
+          el.addEventListener('input', () => { userTouched[sel] = true; });
+        }
+      });
+    }
+    function clearTouched() {
+      TOUCH_TRACKED.forEach((sel) => { delete userTouched[sel]; });
+    }
+    markTouched();
+
+    function fillFontFromDetect(msg) {
+      if (currentScheme) return;
+      setCurrentLabel('');
+      if (msg.empty) {
+        // Distinguish why detection is empty instead of failing silently:
+        // the form keeps whatever the user sees, the status line explains it.
+        const st = $('#font-status');
+        const nm = msg.emptyLayer ? ('「' + msg.emptyLayer + '」') : '';
+        if (msg.emptyReason === 'no-selection') { if (st) st.textContent = '未选中任何图层（选中文字图层后自动识别）'; }
+        else if (msg.emptyReason === 'no-text-layer') { if (st) st.textContent = '选中的是' + nm + '非文本图层，字体识别需要选中文本图层'; }
+        else if (msg.emptyReason === 'empty-text') { if (st) st.textContent = '文本图层' + nm + '没有文字内容，无法识别'; }
+        return;
+      }
+      if (msg.cnFont) setFontValue('cn', msg.cnFont);
+      if (msg.enFont) setFontValue('en', msg.enFont);
+      if (!userTouched['#cn-size']) $('#cn-size').value = msg.cnSize != null ? msg.cnSize : '';
+      if (!userTouched['#en-size']) $('#en-size').value = msg.enSize != null ? msg.enSize : '';
+      $('#cn-size').placeholder = msg.cnSizeMixed ? '混合字号（留空保留）' : '如 14，留空不改';
+      $('#en-size').placeholder = msg.enSizeMixed ? '混合字号（留空保留）' : '如 12，留空不改';
+      if (msg.cnColor && !userTouched['#cn-color']) $('#cn-color').value = rgbToHex(msg.cnColor);
+      if (msg.enColor && !userTouched['#en-color']) $('#en-color').value = rgbToHex(msg.enColor);
+    }
+
+
+    // 主进程已开始处理（字体加载可能耗时）→ 明确告知，并启动等待守卫
+    function onFontMixStart(msg) {
+      if (fontGuard) { clearTimeout(fontGuard); fontGuard = null; }
+      const n = (msg && msg.total) || 0;
+      $('#font-status').textContent = n ? ('正在加载字体…（共 ' + n + ' 个文本节点）') : '正在加载字体…';
+      fontGuard = setTimeout(() => {
+        fontGuard = null;
+        $('#font-status').textContent = '主进程长时间无响应（可能卡在字体加载）。请再点一次；若仍停在这里，请把此提示告诉我。';
+      }, 20000);
+    }
+
+    // 字体混排结果反馈：成功 / 失败 / 字体不可用都要说清楚，不能静默
+    function showFontMixResult(msg) {
+      const el = $('#font-status');
+      if (!el) return;
+      if (fontGuard) { clearTimeout(fontGuard); fontGuard = null; }   // 收到结果即撤掉等待守卫
+      const failed = msg.failed || [];
+      const missing = msg.missingFonts || [];
+      if (msg.error) {
+        el.textContent = '字体混排失败：' + msg.error +
+          (msg.stage ? '（' + msg.stage + (msg.line ? ' 第 ' + msg.line + ' 行' : '') + '）' : '');
+        return;
+      }
+      if (msg.empty || msg.total === 0) { el.textContent = (msg.emptyLayer ? '选中的「' + msg.emptyLayer + '」不是文本图层' : '未选中文本图层') + '，请先在画布上选择文本'; return; }
+      if (missing.length) {
+        el.textContent = '字体在本机不可用：' + missing.join('、') + '（请改用本机已安装的字体）';
+        return;
+      }
+      if (failed.length) {
+        el.textContent = '已处理 ' + msg.ok + ' 个，失败 ' + failed.length +
+          ' 个（' + failed[0].name + '：' + failed[0].reason +
+          (failed[0].stage ? '／' + failed[0].stage : '') + '）';
+        return;
+      }
+      // 颜色行为说明：点的是哪半边按钮就按哪边算，与方案里存的 syncColor 无关
+      const colorNote = lastSyncColor ? '；已按左右侧字色同步颜色' : '；未调整颜色（保留原文字颜色）';
+      // 字体被 Photoshop 替换：写入结果保留，只如实说明哪一段被换掉
+      // 整层退化（layerFallback）：分段写入被整体拒绝时的兜底，说明用了哪条路径
+      if ((msg.substituted || []).length) {
+        const sb = String(msg.substituted[0] || '');
+        const bi = sb.indexOf('[');
+        const isWholeLayer = msg.path === 'dom-fallback';
+        el.textContent = '已应用 ' + msg.ok + ' 个（其中 ' + msg.substituted.length + ' 个字体被 Photoshop 替换' +
+          (bi > 0 ? '：' + sb.slice(bi + 1, sb.length - 1) : '') +
+          (isWholeLayer ? '，已按整层字体处理' : '，其余分段已生效') + colorNote + '）';
+        return;
+      }
+      if ((msg.layerFallback || []).length) {
+        const fb = String(msg.layerFallback[0] || '');
+        const br = fb.indexOf('[');
+        el.textContent = '已应用 ' + msg.ok + ' 个（其中 ' + msg.layerFallback.length +
+          ' 个按整层字体处理：分段写入被拒' + (br > 0 ? '，' + fb.slice(br + 1, fb.length - 1) : '') + colorNote + '）';
+        return;
+      }
+      const notes = (msg.notes || []).filter(Boolean);
+      const tail = notes.length ? '（' + notes.join('；') + '）' : '';
+      el.textContent = (msg.timedOut
+        ? ('已应用：' + msg.ok + ' 个文本节点（部分字体加载超时，若有遗漏请重试）')
+        : ('已应用：' + msg.ok + ' 个文本节点')) + tail + colorNote;
+    }
+
+    // 字距结果：先暴露真实错误，绝不显示 undefined
+    function showKerningResult(msg) {
+      const el = $('#kerning-status');
+      if (!el) return;
+      if (msg && msg.error) {
+        el.textContent = '字距失败：' + msg.error +
+          (msg.stage ? '（' + msg.stage + (msg.line ? ' 第 ' + msg.line + ' 行' : '') + '）' : '');
+        return;
+      }
+      if (!msg || msg.empty) { el.textContent = '未选中文本图层'; return; }
+      const opt = Number(msg.optical) || 0, trk = Number(msg.tracking) || 0;
+      const lead = Number(msg.leading) || 0, leadFail = Number(msg.leadingFailed) || 0;
+      const leadAsked = msg.leadingRequested !== false;
+      const why = (msg.skipped && msg.skipped.length) ? '（' + msg.skipped[0] + '）' : '';
+      let text;
+      if (opt && !trk) text = '已按 Photoshop「视觉」字距处理 ' + opt + ' 个文本图层';
+      else if (opt && trk) text = '视觉字距 ' + opt + ' 个图层，另 ' + trk + ' 个回退为符号字距';
+      else if (trk) text = '已调整 ' + trk + ' 个图层的符号字距' + why;
+      else text = '未能调整' + why;
+      // 行间距是可选项：勾了就报结果，没勾就说明没动
+      if (!leadAsked) text += '；未勾选行距自动，行间距保持不变';
+      else if (lead && !leadFail) text += '；行间距已设为「自动」';
+      else if (lead) text += '；行间距「自动」成功 ' + lead + ' 个，失败 ' + leadFail + ' 个' + why;
+      else text += '；行间距未能设为「自动」' + why;
+      el.textContent = text + (msg.failed ? '，失败 ' + msg.failed + ' 个' : '');
+    }
+
+    // 数值输入：兼容不同键盘/区域的小数分隔符（例如欧洲键盘输入 "1,5"）
+    // parseFloat('1,5') 会得到 1 —— 不同地区用户会因此得到错误数值。
+    function numInput(el) {
+      if (!el) return null;
+      const s = String(el.value == null ? '' : el.value).trim().replace(',', '.');
+      const n = parseFloat(s);
+      return (isNaN(n) || !isFinite(n)) ? null : n;
+    }
+
+    // ---- 颜色转换 ----
+    function hexToRgb(hex) {
+      const h = hex.replace('#', '');
+      const n = parseInt(h, 16);
+      return { r: ((n >> 16) & 255) / 255, g: ((n >> 8) & 255) / 255, b: (n & 255) / 255 };
+    }
+    function rgbToHex(c) {
+      if (!c) return '#000000';
+      const f = (x) => ('0' + Math.round(x * 255).toString(16)).slice(-2);
+      return '#' + f(c.r) + f(c.g) + f(c.b);
+    }
+
+
+
+    /* ============================================================
+       字体库（按需加载 · family 聚合 · 限量渲染）
+       ------------------------------------------------------------
+       旧实现：主进程在插件启动时返回 listAvailableFontsAsync() 的**扁平全量组合**，
+       UI 收到后给「中文」「英文」两个 <select> 各铺一份。
+       实测 8000 条时——字体列表送达同步阻塞 ~56ms、打开下拉再花 ~47ms、
+       DOM 里留下 16000 个 <option>；而设计机器上的字体数量往往更多。
+
+       新实现（做法参考开源插件 MixFonts）：
+         · 主进程按 family 聚合（8000 → 约 800 项），体积降一个数量级
+         · 不再预铺 <option>，条目在「打开下拉 / 输入关键词」时即时生成
+         · 单次渲染限量（无关键词 40 条、有搜索词 120 条）
+         · 加载时机改为「打开下拉时」或「面板空闲后预热」，不拖慢启动
+       ============================================================ */
+    let fontFamilies = null;   // [{family, styles:[…]}]；null = 尚未加载
+    let fontLoading = false;
+    let fontError = '';
+
+    // 请求字体库：只在首次真正发消息，之后命中主进程缓存
+    function requestFontList() {
+      if (fontFamilies || fontLoading) return;
+      fontLoading = true;
+      send({ type: 'list-fonts' });
+    }
+
+    // 字体键（family + style 的唯一标识）
+    function fontKey(family, style) { return family + '##' + style; }
+
+    // 「优先展示」的字体：当前选中 + 识别到的 + 方案预设里用过的。
+    // 无害化关键词时只渲染 40 条，若这 40 条里就有用户惯用的字体，找字体会顺畅得多。
+    function pinnedFontKeys() {
+      const set = new Set();
+      const add = (f) => { if (f && f.family) set.add(fontKey(f.family, f.style)); };
+      add(fontSel.cn);
+      add(fontSel.en);
+      (fontPresets || []).forEach((p) => { add(p && p.cnFont); add(p && p.enFont); });
+      return set;
+    }
+
+    // 生成字体条目；返回 null 表示数据未就绪（下拉会显示加载提示并等待）
+    function fontItems(q) {
+      if (!fontFamilies) return null;
+      const key = (q || '').trim().toLowerCase();
+      const pinned = pinnedFontKeys();
+      const head = [];
+      const tail = [];
+      for (const fam of fontFamilies) {
+        for (const st of fam.styles) {
+          const label = fam.family + ' / ' + st;
+          if (key && label.toLowerCase().indexOf(key) < 0) continue;
+          const item = { value: JSON.stringify({ family: fam.family, style: st }), label };
+          (pinned.has(fontKey(fam.family, st)) ? head : tail).push(item);
+        }
+      }
+      return head.concat(tail);
+    }
+
+    // 字体库到达（或失败）
+    function applyFontList(msg) {
+      fontLoading = false;
+      fontError = msg.error || '';
+      fontFamilies = Array.isArray(msg.families) ? msg.families : [];
+      if (fontError) {
+        $('#font-status').textContent = '字体库加载失败：' + fontError;
+      } else {
+        ensureFontDefaults();
+      }
+      ['cn-font', 'en-font'].forEach((id) => {
+        const dd = ddRegistry[id];
+        if (dd && dd.refresh) dd.refresh();
+      });
+    }
+
+    // 兜底默认值：仅在用户还没选过字体时设置，避免覆盖「刚识别到的字体」
+    // 用 \u 转义书写，避免裸字符在不同工具链下被改坏（本项目踩过 Unicode 陷阱）
+    function ensureFontDefaults() {
+      if (!fontFamilies.length) return;
+      if (!fontSel.cn) {
+        const cjk = fontFamilies.find((f) => /[\u4E00-\u9FFF]/.test(f.family)) || fontFamilies[0];
+        setFontValue('cn', { family: cjk.family, style: cjk.styles[0] });
+      }
+      if (!fontSel.en) {
+        const f0 = fontFamilies[0];
+        setFontValue('en', { family: f0.family, style: f0.styles[0] });
+      }
+    }
+
+    /* ============================================================
+       通用下拉组件（.dd）：与方案预设弹层同款，用于字体 / 格式 / 对齐
+       隐藏的原生 <select> 仍作为取值源，自定义弹层仅负责展示与选择
+       ============================================================ */
+    function initDropdown(root, opts) {
+      opts = opts || {};
+      const targetId = root.dataset.target;
+      const sel = document.getElementById(targetId);
+      const trigger = root.querySelector('.dd-trigger');
+      const current = root.querySelector('.dd-current');
+      const pop = root.querySelector('.dd-pop');
+      const list = root.querySelector('.dd-list');
+      const searchWrap = root.querySelector('.dd-search');
+      const searchInput = searchWrap ? searchWrap.querySelector('input') : null;
+      const emptyEl = root.querySelector('.dd-empty');
+
+      function syncDisplay() {
+        const opt = sel.selectedOptions && sel.selectedOptions[0];
+        if (opt && sel.value) {
+          current.textContent = opt.textContent;
+          current.classList.remove('empty');
+        } else {
+          current.textContent = root.dataset.placeholder || '请选择';
+          current.classList.add('empty');
+        }
+      }
+
+      function build(q) {
+        q = (q || '').trim().toLowerCase();
+        list.innerHTML = '';
+
+        /* 数据源模式（字体库）：条目按查询即时生成，并且**限量渲染**。
+           以前是把全量字体铺进两个 <select> 再整份渲染成行：
+           实测 8000 条会让「字体列表送达」同步阻塞 ~56ms、打开下拉再花 ~47ms，
+           而设计机器上的字体往往更多。限量后单次只留几十行。 */
+        const useSource = typeof opts.getItems === 'function';
+        let items;
+        let limit = Infinity;
+        if (useSource) {
+          const src = opts.getItems(q);
+          if (src === null) {   // null = 数据尚未就绪（字体库还在加载）
+            if (emptyEl) {
+              emptyEl.textContent = opts.loadingText || '正在加载…';
+              emptyEl.style.display = 'block';
+            }
+            return;
+          }
+          items = src;
+          limit = q ? (opts.searchLimit || 120) : (opts.limit || 40);
+        } else {
+          items = Array.from(sel.options).map((o) => ({ value: o.value, label: o.textContent }));
+        }
+
+        const shown = items.length > limit ? items.slice(0, limit) : items;
+        if (emptyEl) {
+          emptyEl.textContent = opts.emptyText || '无匹配';
+          emptyEl.style.display = shown.length ? 'none' : 'block';
+        }
+        if (useSource && items.length > shown.length) {
+          const more = document.createElement('div');
+          more.className = 'dd-more';
+          more.textContent = '还有 ' + (items.length - shown.length) + ' 个结果，输入关键词缩小范围';
+          list.append(more);
+        }
+        shown.forEach((o) => {
+          const row = document.createElement('button');
+          row.type = 'button';
+          row.className = 'dd-row' + (o.value === sel.value ? ' on' : '');
+          const name = document.createElement('span');
+          name.style.flex = '1';
+          name.style.minWidth = '0';
+          name.style.overflow = 'hidden';
+          name.style.textOverflow = 'ellipsis';
+          name.style.whiteSpace = 'nowrap';
+          name.textContent = o.label;
+          row.append(name);
+          const check = document.createElement('span');
+          check.className = 'dd-row-check';
+          check.textContent = '✓';
+          row.append(check);
+          row.onclick = () => {
+            // 数据源条目并不存在于 <select> 里，选中时补一条，保证取值链路照旧
+            if (!Array.from(sel.options).some((x) => x.value === o.value)) {
+              sel.appendChild(new Option(o.label, o.value));
+            }
+            sel.value = o.value;
+            sel.dispatchEvent(new Event('change'));
+            syncDisplay();
+            close();
+            onPick(o.value);
+          };
+          list.append(row);
+        });
+      }
+
+      // 选中后回调上层（字体下拉用它同步「当前字体」状态）
+      function onPick(value) {
+        if (typeof opts.onPick === 'function') opts.onPick(value);
+      }
+
+      // 程序化赋值：若目标值不在选项里（例如识别到本机字体列表之外的字体），
+      // 自动补一条选项，避免 select.value 被浏览器清空 → 后续取值拿到空字符串。
+      function setValue(value, label) {
+        if (value == null || value === '') return;
+        let hit = Array.from(sel.options).find((o) => o.value === value);
+        if (!hit) {
+          hit = new Option(label || value, value);
+          sel.appendChild(hit);
+        }
+        sel.value = value;
+        syncDisplay();
+      }
+
+      function open() {
+        // 打开任一下拉时，收起其余所有弹层
+        closeAllPickers();
+        root.classList.add('open');
+        pop.classList.add('open');
+        // 打开时才按需取数：字体库体积大且加载慢，不该拖住插件启动
+        if (typeof opts.onOpen === 'function') opts.onOpen();
+        build(searchInput ? searchInput.value : '');
+        fitPopup(pop, trigger, 280, 220);   // 面板矮时上翻并收紧高度
+        if (searchInput) setTimeout(() => searchInput.focus(), 30);
+      }
+      function close() {
+        root.classList.remove('open');
+        pop.classList.remove('open');
+      }
+
+      trigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        pop.classList.contains('open') ? close() : open();
+      });
+      if (searchInput) searchInput.addEventListener('input', () => build(searchInput.value));
+      root.addEventListener('click', (e) => e.stopPropagation());
+      document.addEventListener('click', close);
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+
+      // 外部状态变化后重绘（字体库加载完成、默认值被写入等）
+      function refresh() {
+        syncDisplay();
+        if (pop.classList.contains('open')) build(searchInput ? searchInput.value : '');
+      }
+
+      syncDisplay();
+      return { syncDisplay, open, close, setValue, refresh };
+    }
+
+    ['cn-font', 'en-font'].forEach((id) => {
+      const root = document.querySelector('.dd[data-target="' + id + '"]');
+      if (!root) return;
+      if (id === 'cn-font' || id === 'en-font') {
+        const which = id === 'cn-font' ? 'cn' : 'en';
+        ddRegistry[id] = initDropdown(root, {
+          onPick: (v) => { fontSel[which] = parseFont(v); },
+          // 字体库走「数据源」模式：不预铺 <option>，打开时才请求、
+          // 按关键词即时筛选并限量渲染（详见 fontItems / requestFontList）
+          getItems: (q) => fontItems(q),
+          onOpen: () => requestFontList(),
+          limit: 40,
+          searchLimit: 120,
+          loadingText: '正在加载字体库…（首次较慢，之后走缓存）',
+          emptyText: '无匹配字体',
+        });
+      } else {
+        ddRegistry[id] = initDropdown(root);
+      }
+    });
+
+    // 当前「中/英文字体」的真实状态（取值只认它，不依赖 select.value 是否有效）
+    function parseFont(json) {
+      try { const f = JSON.parse(json); return f && f.family ? { family: f.family, style: f.style } : null; }
+      catch (e) { return null; }
+    }
+    let lastSyncColor = false;   // 最近一次应用是否带颜色（默认不调整颜色）
+    function fontLabel(f) { return f ? f.family + ' / ' + f.style : ''; }
+    // 设置某一路字体：写状态 + 更新下拉显示（字体不在本机列表时自动补选项）
+    function setFontValue(which, font) {
+      if (!font || !font.family) return;
+      fontSel[which] = { family: font.family, style: font.style };
+      const id = which === 'cn' ? 'cn-font' : 'en-font';
+      const dd = ddRegistry[id];
+      if (dd) dd.setValue(JSON.stringify(fontSel[which]), fontLabel(fontSel[which]));
+    }
+
+    // ---- 字体混排：应用（左右两半） ----
+    // 左半 = 应用字体混排与颜色；右半 = 只应用字体混排（完全保留原文字颜色）。
+    // syncColor 显式传给宿主（false 时宿主连颜色键都不建，默认值语义与开关一致）。
+    function sendFontMix(withColor) {
+      const cnFont = fontSel.cn || parseFont($('#cn-font').value);
+      const enFont = fontSel.en || parseFont($('#en-font').value);
+      if (!cnFont || !enFont) { figmaNotify('请先选择中英文各自的字体'); return; }
+      const cfg = {
+        cnFont,
+        enFont,
+        cnSize: numInput($('#cn-size')),
+        enSize: numInput($('#en-size')),
+        syncColor: !!withColor,
+      };
+      if (withColor) {
+        cfg.cnColor = hexToRgb($('#cn-color').value);
+        cfg.enColor = hexToRgb($('#en-color').value);
+      }
+      send({ type: 'font-mixer', config: cfg });
+      lastSyncColor = !!withColor;   // 结果提示需要知道这次走的是哪半边
+      // 立即反馈并启动等待守卫；主进程随后会回 font-mixer-start / font-mixer-done。
+      // 即使主进程完全不回包，20 秒后也会明确告知，而不是永远停在「应用中…」。
+      onFontMixStart({ total: 0 });
+    }
+    $('#font-apply-color').addEventListener('click', () => sendFontMix(true));
+    $('#font-apply-nocolor').addEventListener('click', () => sendFontMix(false));
+
+    /* ============================================================
+       字体混排方案预设（仅字体混排功能 · 顶部下拉选择器）
+       ============================================================ */
+    /* 存储层：方案预设的持久化
+       重要 —— Figma 插件 UI 运行在 data: URL 的 iframe 中，没有自己的域名，
+       浏览器会直接拒绝 localStorage / cookie（抛 SecurityError）。
+       所以真正的持久化必须交给主进程的 figma.clientStorage，用消息异步落盘。
+       这里采用「内存为准 + localStorage 尽力缓存 + clientStorage 落盘」三层：
+         · 内存      —— 所有读取都走它，任何环境都不会抛错（关键，避免保存静默失败）
+         · localStorage —— 可用的环境（浏览器预览）即时读写，当快速缓存用
+         · clientStorage —— 插件内真正持久，关掉插件再打开仍在 */
+    const PK = 'figma-font-mixer-presets';
+    let currentScheme = '';
+    let fontPresets = [];     // 字体混排方案（内存态，唯一取值源）
+
+    function lsRead(key) {
+      try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return null; }
+    }
+    function lsWrite(key, val) {
+      try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) { /* CEP 有真实 origin，可用 */ }
+    }
+    // 落盘：内存 → localStorage 缓存 + 主进程 clientStorage
+    function persistPresets() {
+      lsWrite(PK, fontPresets);
+      send({ type: 'storage-save', data: { fontPresets } });
+    }
+
+    const getPresets = () => fontPresets;
+    const setPresets = (list) => {
+      fontPresets = Array.isArray(list) ? list : [];
+      persistPresets();
+      renderPresetPop();
+    };
+
+    // 读取当前表单，组成一个方案对象（字体取内存态，避免空值导致 JSON.parse 抛错）
+    function readFormAsScheme(name) {
+      return {
+        name,
+        cnFont: fontSel.cn || parseFont($('#cn-font').value),
+        enFont: fontSel.en || parseFont($('#en-font').value),
+        cnSize: numInput($('#cn-size')),
+        enSize: numInput($('#en-size')),
+        syncColor: lastSyncColor,   // 记录保存时是否同步颜色；旧方案无此字段，按关闭处理
+        cnColor: hexToRgb($('#cn-color').value),
+        enColor: hexToRgb($('#en-color').value),
+      };
+    }
+
+    function setCurrentLabel(name) {
+      currentScheme = name || '';
+      const cur = $('#preset-current');
+      cur.textContent = name || '未选择方案';
+      cur.classList.toggle('empty', !name);
+      // 选中方案后，保存按钮变为「更新当前方案」，改完直接覆盖
+      const saveBtn = $('#preset-save');
+      const nameInput = $('#preset-name');
+      if (name) {
+        saveBtn.textContent = '更新「' + name + '」';
+        nameInput.placeholder = '重命名（留空保持不变）';
+      } else {
+        saveBtn.textContent = '保存为方案';
+        nameInput.placeholder = '新方案名，如 中文正文';
+      }
+    }
+
+    function moveFontPreset(name, delta) {
+      const i = fontPresets.findIndex(p => p.name === name), j = i + delta;
+      if (i < 0 || j < 0 || j >= fontPresets.length) return;
+      const t = fontPresets[i]; fontPresets[i] = fontPresets[j]; fontPresets[j] = t; persistPresets(); renderPresetPop();
+    }
+
+    function renderPresetPop() {
+      const list = $('#preset-pop-list');
+      const q = ($('#preset-search').value || '').trim().toLowerCase();
+      const items = getPresets().filter((p) => p.name.toLowerCase().includes(q));
+      list.innerHTML = '';
+      $('#preset-pop-empty').style.display = items.length ? 'none' : 'block';
+
+      const def = document.createElement('button');
+      def.className = 'preset-row' + (!currentScheme ? ' on' : '');
+      def.innerHTML = '<span class=\"preset-row-name\">默认</span><span class=\"preset-row-tip\">识别选中</span>';
+      def.onclick = () => { setCurrentLabel(''); closePresetPop(); figmaNotify('已切换默认，恢复识别回填'); detectActive(); };
+      list.append(def);
+
+      items.forEach((p) => {
+        const row = document.createElement('button');
+        row.className = 'preset-row' + (p.name === currentScheme ? ' on' : '');
+
+        const name = document.createElement('span');
+        name.className = 'preset-row-name';
+        name.textContent = p.name;
+
+        row.append(name);
+
+        if (p.name === currentScheme) {
+          const tip = document.createElement('span');
+          tip.className = 'preset-row-tip';
+          tip.textContent = '当前';
+          row.append(tip);
+        }
+
+        const up = document.createElement('span'); up.textContent = '↑'; up.title = '上移'; up.onclick = (ev) => { ev.stopPropagation(); moveFontPreset(p.name, -1); }; row.append(up);
+        const down = document.createElement('span'); down.textContent = '↓'; down.title = '下移'; down.onclick = (ev) => { ev.stopPropagation(); moveFontPreset(p.name, 1); }; row.append(down);
+
+        const del = document.createElement('span');
+        del.className = 'preset-row-del';
+        del.textContent = '×';
+        del.title = '删除该方案';
+        del.onclick = (ev) => { ev.stopPropagation(); deletePreset(p.name); };
+        row.append(del);
+
+        row.onclick = () => {
+          // 再次点击「当前」方案 = 取消选择，恢复识别回填（识别守卫见 fillFontFromDetect）
+          if (p.name === currentScheme) {
+            setCurrentLabel('');
+            closePresetPop();
+            figmaNotify('已取消方案，恢复识别回填');
+            detectActive();
+            return;
+          }
+          selectPreset(p.name);
+        };
+        list.append(row);
+      });
+    }
+
+    // 选中方案 → 填入表单（不直接改文档，需再点「应用字体混排」）
+    function selectPreset(name) {
+      const p = getPresets().find((x) => x.name === name);
+      if (!p) return;
+      applyPresetToForm(p);
+      setCurrentLabel(name);
+      closePresetPop();
+      figmaNotify('已载入方案：' + name);
+    }
+
+    function deletePreset(name) {
+      setPresets(getPresets().filter((p) => p.name !== name));
+      if (currentScheme === name) setCurrentLabel('');
+    }
+
+    function applyPresetToForm(p) {
+      clearTouched();   // 载入方案是显式意图，方案值优先于「用户手动改过」的状态
+      $('#cn-size').placeholder = '如 14，留空不改';
+      $('#en-size').placeholder = '如 12，留空不改';
+      if (p.cnFont) setFontValue('cn', p.cnFont);
+      if (p.enFont) setFontValue('en', p.enFont);
+      $('#cn-size').value = p.cnSize != null ? p.cnSize : '';
+      $('#en-size').value = p.enSize != null ? p.enSize : '';
+      lastSyncColor = p.syncColor === true;   // 旧方案无此字段 → 默认不调整颜色
+      if (p.cnColor) $('#cn-color').value = rgbToHex(p.cnColor);
+      if (p.enColor) $('#en-color').value = rgbToHex(p.enColor);
+    }
+
+    function openPresetPop() {
+      $('#preset-pop').classList.add('open');
+      $('#preset-bar').classList.add('open');
+      fitPopup($('#preset-pop'), $('#preset-bar'), 300, 0);
+    }
+    function closePresetPop() {
+      $('#preset-pop').classList.remove('open');
+      $('#preset-bar').classList.remove('open');
+    }
+
+    $('#preset-trigger').addEventListener('click', (e) => {
+      e.stopPropagation();
+      $('#preset-pop').classList.contains('open') ? closePresetPop() : openPresetPop();
+    });
+    // 点击外部收起
+    document.addEventListener('click', (e) => {
+      if (!$('#preset-bar').contains(e.target)) closePresetPop();
+    });
+    // Esc 收起
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closePresetPop();
+    });
+    $('#preset-search').addEventListener('input', renderPresetPop);
+
+    // 保存 / 更新方案：已选中方案时直接覆盖，可输入新名实现重命名
+    $('#preset-save').addEventListener('click', () => {
+      try {
+        let name = $('#preset-name').value.trim();
+        if (currentScheme) {
+          if (!name) name = currentScheme;         // 留空 = 更新当前方案
+        } else if (!name) {
+          figmaNotify('请先输入方案名');
+          $('#preset-name').focus();
+          return;
+        }
+
+        let list = getPresets().filter((p) => p.name !== name);
+        if (currentScheme && name !== currentScheme) {
+          list = list.filter((p) => p.name !== currentScheme); // 改名：移除旧名
+        }
+        const scheme = readFormAsScheme(name);
+        if (!scheme.cnFont || !scheme.enFont) {
+          figmaNotify('字体信息缺失，请先选择中英文字体');
+          return;
+        }
+        list.push(scheme);
+
+        const renamed = currentScheme && name !== currentScheme;
+        setPresets(list);
+        setCurrentLabel(name);
+        $('#preset-name').value = '';
+        figmaNotify((renamed ? '已重命名并保存：' : '已保存方案：') + name);
+      } catch (e) {
+        // 任何异常都明确报出来，避免「点了没反应」这种静默失败
+        figmaNotify('保存失败：' + (e && e.message ? e.message : e));
+      }
+    });
+
+    // 导出全部方案
+    $('#preset-export').addEventListener('click', () => {
+      const all = getPresets();
+      if (!all.length) { figmaNotify('当前没有可导出的方案'); return; }
+      download('font-presets.json', JSON.stringify(all, null, 2), 'application/json');
+    });
+
+    // 导入方案（按名称去重合并）
+    $('#preset-import-btn').addEventListener('click', () => $('#preset-import').click());
+    $('#preset-import').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const r = new FileReader();
+      r.onload = () => {
+        try {
+          const imported = JSON.parse(r.result);
+          if (!Array.isArray(imported)) throw new Error('格式错误');
+          const merged = getPresets();
+          let added = 0;
+          imported.forEach((s) => {
+            if (!s || typeof s.name !== 'string') return;
+            const i = merged.findIndex((x) => x.name === s.name);
+            if (i >= 0) { merged[i] = s; } else { merged.push(s); added++; }
+          });
+          setPresets(merged);
+          figmaNotify(`已导入 ${imported.length} 个方案（新增 ${added}）`);
+        } catch (e) { figmaNotify('JSON 解析失败，请检查文件'); }
+      };
+      r.readAsText(file);
+      e.target.value = '';
+    });
+
+    renderPresetPop();
+
+
+    // ---- 通知：面板内轻量提示条（替代 Figma 主进程 toast） ----
+    let toastTimer = null;
+    function figmaNotify(msg) {
+      let el = document.getElementById('toast');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'toast';
+        document.body.appendChild(el);
+      }
+      el.textContent = String(msg || '');
+      el.className = 'show';
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { el.className = ''; }, 2200);
+    }
+
+
+
+    function triggerDownload(name, blob) {
+      const u = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = u; a.download = name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(u), 1000);
+    }
+    function download(name, text, mime) {
+      triggerDownload(name, new Blob([text], { type: mime }));
+    }
+
+
+    // ---- 兜底：非插件环境（浏览器直接打开预览）填充示例 ----
+    // 注意：CEP 面板同样满足 window.parent === window，需同时排除 CEP 运行时
+    if (window.parent === window && !window.__adobe_cep__) {
+      setTimeout(() => {
+        if (!fontFamilies) {
+          applyFontList({
+            families: [
+              { family: 'Inter', styles: ['Regular', 'Medium', 'Bold'] },
+              { family: 'Roboto', styles: ['Regular', 'Bold'] },
+              { family: '苹方-简', styles: ['Regular', 'Semibold'] },
+              { family: '思源黑体', styles: ['Regular', 'Bold'] },
+            ],
+          });
+          setPresets([
+            { name: '中文正文 14/12', cnFont: { family: '苹方-简', style: 'Regular' }, enFont: { family: 'Inter', style: 'Regular' }, cnSize: 14, enSize: 12, syncColor: true, cnColor: hexToRgb('#222222'), enColor: hexToRgb('#444444') },
+            { name: '中英混排标题 20/18', cnFont: { family: '苹方-简', style: 'Semibold' }, enFont: { family: 'Inter', style: 'Bold' }, cnSize: 20, enSize: 18, syncColor: true, cnColor: hexToRgb('#111111'), enColor: hexToRgb('#FF5A2B') },
+          ]);
+        }
+      }, 200);
+    }
+  </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
