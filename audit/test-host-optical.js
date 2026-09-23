@@ -162,14 +162,18 @@ const g = stubs.$.global.cephostDispatch;
 check(typeof g === 'function', '宿主入口可从 $.global 取到');
 const call = (t, a) => { try { return JSON.parse(g(t, a ? encodeURIComponent(JSON.stringify(a)) : '')); } catch (e) { return { __parseError: e.message }; } };
 
-/* ---------- 环境自报 ---------- */
+/* ---------- 环境自报 ----------
+   v4.7 起 diag 拆成两档：'diag' 轻量（连接即回，不建字体索引不遍历图层树），
+   'diag-full' 才含图层来源/字体数等重信息 —— 启动卡机的根治。 */
 let r = call('diag');
 check(r.host && r.host === (src.match(/HOST_VERSION = '([^']+)'/) || [])[1], 'diag 报告的宿主版本与源码一致', r.host);
 check(r.ps === 'Adobe Photoshop 21.2.0', 'diag 报告 Photoshop 版本', r.ps);
-check(r.layerSource === 'activeLayers' && r.textLayers === 1, 'diag 报告图层来源与文本图层数', r.layerSource + '/' + r.textLayers);
-check(r.autoKernType && r.autoKernType.indexOf('ok:OPTICAL=3') === 0, 'diag 确认 AutoKernType.OPTICAL 可用', r.autoKernType);
-check(r.showColorPicker === 'function', 'diag 确认 showColorPicker 存在', r.showColorPicker);
-check(r.stringIDToTypeID === 'function', 'diag 确认 stringIDToTypeID 存在', r.stringIDToTypeID);
+check(r.doc === 'yes' && r.docCount === 1, 'diag 轻量档报告文档存在', JSON.stringify(r));
+r = call('diag-full');
+check(r.layerSource === 'activeLayers' && r.textLayers === 1, 'diag-full 报告图层来源与文本图层数', r.layerSource + '/' + r.textLayers);
+check(r.autoKernType && r.autoKernType.indexOf('ok:OPTICAL=3') === 0, 'diag-full 确认 AutoKernType.OPTICAL 可用', r.autoKernType);
+check(r.showColorPicker === 'function', 'diag-full 确认 showColorPicker 存在', r.showColorPicker);
+check(r.stringIDToTypeID === 'function', 'diag-full 确认 stringIDToTypeID 存在', r.stringIDToTypeID);
 
 /* ---------- activeLayers 返回 undefined 时不得崩（真机故障点） ---------- */
 const goodDoc = stubs.app.activeDocument;

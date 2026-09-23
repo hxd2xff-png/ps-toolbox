@@ -425,17 +425,17 @@ function makeSymLayer() {
   return l;
 }
 const symFontAt = (w, k) => { for (let t = 0; t < w.length; t++) if (k >= w[t].from && k < w[t].to) return w[t].style.getString(id('fontPostScriptName')); return null; };
-// auto (v4.6 default): ALL symbols ride with the Chinese font — fullwidth AND
-// halfwidth punctuation. Pure Latin display fonts often miss fullwidth glyphs,
-// which made Photoshop substitute whole ranges on real machines.
+// auto (v4.7, aligned with the MD reference): fullwidth/CJK punct rides with
+// the Chinese font; ASCII punctuation stays English (the reference keeps it EN
+// in auto — every Latin face carries those glyphs); explicit switches win.
 let symLayer = makeSymLayer();
 r = tryCall('font-mixer', { cnFont: { family: 'PingFang SC', style: 'Bold' }, enFont: { family: 'Inter', style: 'Regular' } });
 check(r.ok && r.parsed.ok === 1 && r.parsed.path === 'canonical', 'symSide auto: mix runs on canonical path');
 let w = symLayer.textItem._state.ranges;
 checkEq(symFontAt(w, 0), 'Inter-Regular', 'symSide auto: latin H stays English');
-checkEq(symFontAt(w, 2), 'PingFangSC-Bold', 'symSide auto: halfwidth ( rides with Chinese (v4.6 default)');
+checkEq(symFontAt(w, 2), 'Inter-Regular', 'symSide auto: halfwidth ( stays English (MD ref)');
 checkEq(symFontAt(w, 3), 'PingFangSC-Bold', 'symSide auto: ideograph stays Chinese');
-checkEq(symFontAt(w, 5), 'PingFangSC-Bold', 'symSide auto: halfwidth ) rides with Chinese (v4.6 default)');
+checkEq(symFontAt(w, 5), 'Inter-Regular', 'symSide auto: halfwidth ) stays English (MD ref)');
 // cn: ALL symbols (halfwidth included) go to the Chinese font
 symLayer = makeSymLayer();
 r = tryCall('font-mixer', { cnFont: { family: 'PingFang SC', style: 'Bold' }, enFont: { family: 'Inter', style: 'Regular' }, symSide: 'cn' });

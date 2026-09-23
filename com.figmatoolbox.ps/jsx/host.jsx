@@ -42,7 +42,7 @@
 
 var cephostDispatch = (function () {
 
-    var HOST_VERSION = '4.7.0';
+    var HOST_VERSION = '4.7.1';
     var _stage = 'init';
     function stage(s) { _stage = s; return s; }
 
@@ -137,18 +137,36 @@ var cephostDispatch = (function () {
        3. explicit symbol switch          -> cn/en for symbol-class chars
        4. CJK ideographs/kana/fullwidth   -> Chinese
        5. everything else                 -> English.
+       BLANK exception (matches the Figma reference byte for byte):
+       ASCII space/tab/newline are glyphless glue. They are NOT punctuation
+       (\p{Z}), so in the reference they always test EN and the symbol switch
+       never touches them. They ride with the PREVIOUS character's side in
+       segmentsOf so runs stay contiguous.
+       '-' and '_' ARE punctuation (\p{P}) in the reference: they follow the
+       symbol switch when explicitly chosen, and in AUTO they stay ENGLISH
+       (the ref's isCJK returns false for them) - NOT the v4.6 auto-CN rule,
+       which exists for fullwidth punctuation that Latin faces lack.
        Returns true for Chinese side, false for English side. */
+    function isBlankChar(ch) {
+        var c = ch.charCodeAt(0);
+        return c === 0x20 || c === 0x09 || c === 0x0A || c === 0x0D;
+    }
     function sideOfCharCtx(ch, symSide, text, index) {
         if (isUniRomanCN(ch)) return true;
         if (text && text.length && isAsciiRomanAt(text, index)) return true;
+        if (isBlankChar(ch)) return false;   // glue: never styled, never switched
         if (symSide === 'cn' && isSymbolChar(ch)) return true;
         if (symSide === 'en' && isSymbolChar(ch)) return false;
-        // AUTO default (v4.6.0): every symbol rides with the Chinese font.
-        // CJK fonts carry both fullwidth AND halfwidth punctuation glyphs;
-        // pure Latin display fonts often miss fullwidth forms, which is what
-        // made Photoshop silently substitute whole ranges (reported on real
-        // machines). Halfwidth ASCII letters/digits stay English-side.
-        if (isSymbolChar(ch)) return true;
+        // AUTO default (v4.6.0): symbols ride with the Chinese font because
+        // CJK faces carry both fullwidth AND halfwidth glyphs. BUT pure-ASCII
+        // connector punctuation (- _ and friends) exists in every Latin face:
+        // the reference keeps it ENGLISH in auto. Only chars whose ref-lexicon
+        // is CJK-or-fullwidth go CN here; plain ASCII punctuation stays EN.
+        if (isSymbolChar(ch)) {
+            var c = ch.charCodeAt(0);
+            if (c < 0x80) return false;      // ASCII punct: ref keeps it EN in auto
+            return true;                     // fullwidth/CJK punct: CN (ref isCJK range)
+        }
         return isCJK(ch);
     }
     // char-only entry point used where there is no surrounding text context
@@ -1595,7 +1613,23 @@ var cephostDispatch = (function () {
 
     /* ---------------- environment probe (self observation) ---------------- */
 
+    // Environment probe. DELIBERATELY CHEAP: the panel calls this right after
+    // connect, when detect-font / list-fonts may also be queued on the PS main
+    // thread. A full font-index build (app.fonts, 800+ items) plus a whole
+    // document layer-tree walk here made panel open stall the whole machine.
+    // The heavy facts are only gathered on the 'diag-full' variant.
     function envProbe() {
+        var o = {};
+        o.host = HOST_VERSION;
+        try { o.hostFile = String($.fileName || ''); } catch (e0) { o.hostFile = 'err'; }
+        try { o.ps = String(app.name) + ' ' + String(app.version); } catch (e1) { o.ps = 'err:' + errText(e1); }
+        var d = docSafe();
+        o.doc = d ? 'yes' : 'none';
+        if (d) { try { o.docName = String(d.name || '(unnamed)'); } catch (e2) { o.docName = 'err'; } }
+        try { o.docCount = app.documents.length; } catch (e3) { o.docCount = 'err:' + errText(e3); }
+        return jval(o);
+    }
+    function envProbeFull() {
         var o = {};
         o.host = HOST_VERSION;
         try { o.hostFile = String($.fileName || ''); } catch (e0) { o.hostFile = 'err'; }
@@ -1634,6 +1668,7 @@ var cephostDispatch = (function () {
         'sel-sig': function () { return selSig(); },
         'pick-color': function (a) { return pickColor(a); },
         'diag': function () { return envProbe(); },
+        'diag-full': function () { return envProbeFull(); },
         'selftest': function (a) { return selfTest(a); },
         // kept so older panels keep working: the probe is now a safe
         // temp document test instead of a temp layer test

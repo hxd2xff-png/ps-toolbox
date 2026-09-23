@@ -749,7 +749,7 @@
 
     // 面板期望的宿主版本：与 jsx/host.jsx 的 HOST_VERSION 一致。
     // 用于发现「PS 启动时 ScriptPath 已加载旧版宿主」并强制重载，无需重启 Photoshop。
-    const HOST_EXPECT = '4.7.0';
+    const HOST_EXPECT = '4.7.1';
     const EXT_DIR = (() => {
       try { return cs.getSystemPath(SystemPath.EXTENSION) || ''; } catch (e) { return ''; }
     })();
@@ -816,10 +816,17 @@
               reloadHost();
               return;
             }
-            callHost('diag', null, (dg) => {
-              diagLog('host', 'env -> ' + JSON.stringify(dg));
-              finishHost(true, 'ScriptPath 已加载，宿主 v' + ver);
-            }, true);
+            // 连接成功即就绪。env 探测（diag）曾在这里同步跑：它每次都构建
+            // 全量字体索引 + 遍历整个图层树，正好撞上启动时 detect-font /
+            // list-fonts 也在挤 PS 主线程 —— 打开面板那几秒整台机器发卡
+            // 就是这个叠加。现在延迟到 3s 后空闲时再跑，纯诊断用途。
+            finishHost(true, 'ScriptPath 已加载，宿主 v' + ver);
+            setTimeout(() => {
+              if (!hostReady) return;
+              callHost('diag', null, (dg) => {
+                diagLog('host', 'env -> ' + JSON.stringify(dg));
+              }, true);
+            }, 3000);
           }, true);
           return;
         }
@@ -1077,7 +1084,10 @@
     // 识别选中图层不依赖字体库 → 立刻发出（与 Figma 版一致的启动时序）
     detectActive();
     send({ type: 'storage-load' });   // 从 localStorage 读回已保存的方案
-    setTimeout(requestFontList, 0);   // 异步拉取字体库（Photoshop app.fonts）
+    // 字体库拉取（app.fonts 全量遍历 + 800 家族跨桥序列化）延迟到空闲时段：
+    // 与启动时的 detect-font / ping / diag 同帧跑会让整台机器发卡。
+    // 只有用户打开字体下拉会立刻触发加载，这里的预热只是锦上添花。
+    setTimeout(requestFontList, 2500);
     requestResize();
 
     $('#kerning-apply').addEventListener('click', () => {

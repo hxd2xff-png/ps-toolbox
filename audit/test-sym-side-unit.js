@@ -6,7 +6,7 @@ function grab(name) {
   const g = src.match(re);
   return g ? g[0] : null;
 }
-const code = [grab('isCJK'), grab('isUniRomanCN'), grab('isRomanLetter'), grab('isAsciiRomanAt'), grab('romanValue'), grab('asciiRomanShape'), grab('isSymbolChar'), grab('sideOfCharCtx'), grab('sideOfChar')].filter(Boolean).join('\n');
+const code = [grab('isCJK'), grab('isUniRomanCN'), grab('isRomanLetter'), grab('isAsciiRomanAt'), grab('romanValue'), grab('asciiRomanShape'), grab('isSymbolChar'), grab('isBlankChar'), grab('sideOfCharCtx'), grab('sideOfChar')].filter(Boolean).join('\n');
 if (!code.includes('sideOfChar')) { console.log('GRAB FAILED'); process.exit(1); }
 const sandbox = {};
 vm.createContext(sandbox);
@@ -20,8 +20,8 @@ function check(cond, name) {
 const side = (ch, m) => vm.runInContext(`sideOf(${JSON.stringify(ch)}, ${JSON.stringify(m)})`, sandbox) ? 'CN' : 'EN';
 const sideCtx = (ch, t, i) => vm.runInContext(`sideOfCharCtx(${JSON.stringify(ch)}, null, ${JSON.stringify(t)}, ${i})`, sandbox) ? 'CN' : 'EN';
 
-// halfwidth symbols
-check(side('(', 'auto') === 'CN', 'halfwidth ( auto -> CN (v4.6 default: symbols ride with CN)');
+// halfwidth symbols (v4.7: aligned with the MD reference — ASCII punct stays EN in auto)
+check(side('(', 'auto') === 'EN', 'halfwidth ( auto -> EN (MD reference)');
 check(side('(', 'cn') === 'CN', 'halfwidth ( cn -> CN (switch honored)');
 check(side('(', 'en') === 'EN', 'halfwidth ( en -> EN');
 // fullwidth symbols
