@@ -42,7 +42,7 @@
 
 var cephostDispatch = (function () {
 
-    var HOST_VERSION = '4.6.0';
+    var HOST_VERSION = '4.7.0';
     var _stage = 'init';
     function stage(s) { _stage = s; return s; }
 
@@ -59,10 +59,56 @@ var cephostDispatch = (function () {
         if (c >= 0xAC00 && c <= 0xD7AF) return true;  // hangul
         if (c >= 0xF900 && c <= 0xFAFF) return true;  // compat ideographs
         if (c >= 0xFF00 && c <= 0xFFEF) return true;  // fullwidth forms: brackets, marks, yen
-        if (c >= 0x2160 && c <= 0x217F) return true;  // roman numerals I II III (no glyphs in Latin display fonts)
-        if (c >= 0x2460 && c <= 0x24FF) return true;  // circled numbers (no glyphs in Latin display fonts)
-        if (c >= 0x30A0 && c <= 0x30FF) return true;  // (covered by kana) kept explicit for clarity
         return false;
+    }
+
+    /* ---------------- roman numerals (per spec MD \u00a74/\u00a75) ----------------
+       Unicode roman numerals: ONLY the common I..XII forms ride with the
+       Chinese font (Chinese faces carry these glyphs; pure Latin display
+       fonts do not). Larger numerals (L C D M, \u2180+) and exotic forms are
+       English-side: they cannot be reliably told from letters. */
+    function isUniRomanCN(ch) {
+        var c = ch.charCodeAt(0);
+        return (c >= 0x2160 && c <= 0x216B) || (c >= 0x2170 && c <= 0x217B);
+    }
+    // ASCII roman numerals are plain letters, so a lone char class test would
+    // swallow MIX/SKU-IV-A/10MLX2. A token only counts when ALL of these hold:
+    // valid numeral shape, contains I/V/X, value <= 25, and it is NOT embedded
+    // in an alphanumeric/hyphen/underscore code. A single letter must sit next
+    // to CJK text to count (spec \u00a75: conservative strategy).
+    function romanValue(tok) {
+        var V = { I: 1, V: 5, X: 10, L: 50, C: 100, D: 500, M: 1000 };
+        var t = 0, i, v, nx;
+        for (i = 0; i < tok.length; i++) {
+            v = V[tok.charAt(i)] || 0;
+            nx = (i + 1 < tok.length) ? (V[tok.charAt(i + 1)] || 0) : 0;
+            t += (v < nx) ? -v : v;
+        }
+        return t;
+    }
+    function asciiRomanShape(tok) {
+        return /^(?:M{0,4}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3}))$/.test(tok) && /[IVX]/.test(tok);
+    }
+    function isRomanLetter(ch) {
+        var c = ch.charCodeAt(0);
+        return c === 73 || c === 86 || c === 88 || c === 76 || c === 67 || c === 68 || c === 77; // I V X L C D M
+    }
+    // true when the token covering charAt(index) qualifies as an ASCII roman numeral
+    function isAsciiRomanAt(text, index) {
+        if (!isRomanLetter(text.charAt(index))) return false;
+        var start = index;
+        while (start > 0 && isRomanLetter(text.charAt(start - 1))) start--;
+        var end = index + 1;
+        while (end < text.length && isRomanLetter(text.charAt(end))) end++;
+        var tok = text.substring(start, end);
+        if (!asciiRomanShape(tok)) return false;
+        if (romanValue(tok) > 25) return false;   // XXVI+, MIX etc stay English
+        var prev = start > 0 ? text.charAt(start - 1) : '';
+        var next = end < text.length ? text.charAt(end) : '';
+        var reCode = /[A-Za-z0-9_\-]/;
+        if (reCode.test(prev) || reCode.test(next)) return false;  // SKU-IV-A, MIX123, IV_CODE
+        if (tok.length === 1 && !isCJK(prev) && !isCJK(next)) return false;  // lone "I" in English copy
+        return true;
     }
 
     /* Symbols are characters that could live on either side: punctuation,
@@ -77,8 +123,6 @@ var cephostDispatch = (function () {
         if (c >= 0x5B && c <= 0x60) return true;      // [ .. backtick
         if (c >= 0x7B && c <= 0x7F) return true;      // { .. DEL zone
         if (c >= 0x2000 && c <= 0x206F) return true;  // general punct: dashes, quotes
-        if (c >= 0x2160 && c <= 0x217F) return true;  // roman numerals I II III
-        if (c >= 0x2460 && c <= 0x24FF) return true;  // circled numbers
         if (c >= 0x3000 && c <= 0x303F) return true;  // CJK symbols: corner brackets
         if (c >= 0xFF01 && c <= 0xFF0F) return true;  // fullwidth ! .. /
         if (c >= 0xFF1A && c <= 0xFF20) return true;  // fullwidth : .. @
@@ -87,14 +131,16 @@ var cephostDispatch = (function () {
         return false;
     }
 
-    /* Side of one character under a symSide mode:
-       'auto' = historic isCJK behaviour (CJK punct -> Chinese, rest -> English);
-       'cn'   = every symbol goes to the Chinese font;
-       'en'   = every symbol (incl. CJK punct) goes to the English font.
+    /* Side of one character under a symSide mode (MD \u00a71 priority order):
+       1. Unicode roman I..XII            -> Chinese (regardless of the switch)
+       2. ASCII roman I..XXV (in context) -> Chinese
+       3. explicit symbol switch          -> cn/en for symbol-class chars
+       4. CJK ideographs/kana/fullwidth   -> Chinese
+       5. everything else                 -> English.
        Returns true for Chinese side, false for English side. */
-    function sideOfChar(ch, symSide) {
-        // explicit switch wins for ALL symbol-class characters (fullwidth,
-        // halfwidth, roman numerals, circled numbers) -- no default overrides it
+    function sideOfCharCtx(ch, symSide, text, index) {
+        if (isUniRomanCN(ch)) return true;
+        if (text && text.length && isAsciiRomanAt(text, index)) return true;
         if (symSide === 'cn' && isSymbolChar(ch)) return true;
         if (symSide === 'en' && isSymbolChar(ch)) return false;
         // AUTO default (v4.6.0): every symbol rides with the Chinese font.
@@ -104,6 +150,10 @@ var cephostDispatch = (function () {
         // machines). Halfwidth ASCII letters/digits stay English-side.
         if (isSymbolChar(ch)) return true;
         return isCJK(ch);
+    }
+    // char-only entry point used where there is no surrounding text context
+    function sideOfChar(ch, symSide) {
+        return sideOfCharCtx(ch, symSide, null, -1);
     }
 
     function esc(s) {
@@ -360,15 +410,29 @@ var cephostDispatch = (function () {
     function psNameOf(family, style) {
         if (!family) return null;
         var list = fontIndex(), i, f;
+        if (style) {
+            for (i = 0; i < list.length; i++) {
+                f = list[i];
+                if (f.family === family && f.style === style) return f.name;
+            }
+        }
+        // requested style missing -> nearest weight of the SAME family, never a
+        // random other family. Weight order so "Light requested, only Medium
+        // installed" stays in-family instead of jumping to a random face.
+        var WR = [/thin/i, /extralight/i, /light/i, /regular|book|roman/i, /medium/i, /semibold|demibold/i, /bold/i, /extrabold|black|heavy|ultra/i];
+        var wOf = function (st) {
+            var s = String(st || ''), j;
+            for (j = 0; j < WR.length; j++) if (WR[j].test(s)) return j;
+            return WR.length;
+        };
+        var best = null, bestW = -1;
         for (i = 0; i < list.length; i++) {
             f = list[i];
-            if (f.family === family && f.style === style) return f.name;
+            if (f.family !== family) continue;
+            var w = wOf(f.style);
+            if (best === null || Math.abs(w - wOf(style)) < Math.abs(bestW - wOf(style))) { best = f; bestW = w; }
         }
-        for (i = 0; i < list.length; i++) {
-            f = list[i];
-            if (f.family === family) return f.name;
-        }
-        return null;
+        return best ? best.name : null;
     }
     function metaOfPSName(psName) {
         var list = fontIndex(), i;
@@ -672,6 +736,48 @@ var cephostDispatch = (function () {
         return { plan: lean, path: 'canonical-nosize' };
     }
 
+    // Build a one-shot repair plan: every segment Photoshop substituted with a
+    // DIFFERENT family is re-pointed at the CJK font (Chinese faces carry the
+    // widest glyph set, so the swap sticks). Same-family weight normalizations
+    // are left alone (verifyPlan already accepts them).
+    function repairPlanFromActual(usedPlan, actual, cnPS) {
+        if (!cnPS) return [];
+        var out = [], i, j, p, a, changed = false;
+        for (i = 0; i < usedPlan.length; i++) {
+            p = usedPlan[i];
+            var swap = false;
+            if (p.psName) {
+                for (j = 0; j < actual.length; j++) {
+                    a = actual[j];
+                    if (a.to <= p.from || a.from >= p.to) continue;
+                    var got = a.psName || '';
+                    if (got && got !== p.psName) {
+                        var wm = metaOfPSName(p.psName), wg = metaOfPSName(got);
+                        if (!(wm && wg && wm.family === wg.family)) { swap = true; changed = true; }
+                    }
+                    if (swap) break;
+                }
+            }
+            out.push(swap
+                ? { from: p.from, to: p.to, psName: cnPS, size: p.size, rgb: p.rgb, trck: p.trck }
+                : { from: p.from, to: p.to, psName: p.psName, size: p.size, rgb: p.rgb, trck: p.trck });
+        }
+        if (!changed) return [];
+        // merge adjacent segments that ended up identical (no pointless splits)
+        var merged = [], m;
+        for (m = 0; m < out.length; m++) {
+            var last = merged.length ? merged[merged.length - 1] : null;
+            var same = last && last.psName === out[m].psName &&
+                (last.size === null) === (out[m].size === null) &&
+                (last.size === null || String(last.size) === String(out[m].size)) &&
+                (!last.rgb) === (!out[m].rgb) &&
+                (!last.trck) === (!out[m].trck);
+            if (same) last.to = out[m].to;
+            else merged.push(out[m]);
+        }
+        return merged;
+    }
+
     function verifyPlan(layerId, plan, textLen) {
         var actual = readRanges(layerId, textLen);
         var problems = [], i, j, p, a, got;
@@ -684,6 +790,11 @@ var cephostDispatch = (function () {
                 if (a.to <= p.from || a.from >= p.to) continue;
                 got = a.psName || '(none)';
                 if (got !== p.psName) {
+                    // same family, different weight: the requested style is not
+                    // installed and Photoshop kept the nearest weight. The face
+                    // the user asked for IS on the glyphs - not a substitution.
+                    var wm = metaOfPSName(p.psName), wg = metaOfPSName(got);
+                    if (wm && wg && wm.family === wg.family) continue;
                     problems.push({ wanted: p.psName, got: got, range: a.from + '-' + a.to, plan: p.from + '-' + p.to });
                     break;
                 }
@@ -722,13 +833,14 @@ var cephostDispatch = (function () {
     function segmentsOf(text, symSide) {
         var segs = [], start = 0, prev = false, i, cur, ch;
         if (!text || !text.length) return segs;
-        prev = sideOfChar(text.charAt(0), symSide);
+        prev = sideOfCharCtx(text.charAt(0), symSide, text, 0);
         for (i = 1; i < text.length; i++) {
             ch = text.charAt(i);
-            // line breaks carry no glyphs: let them ride with the previous
-            // character's side so consecutive lines merge into one range
-            // (multi-line layers stay gapless without pointless splits)
-            cur = (ch === '\r' || ch === '\n') ? prev : sideOfChar(ch, symSide);
+            // line breaks and blanks carry no glyphs: let them ride with the
+            // previous character's side so runs like "I XXV" or wrapped CJK
+            // lines stay one range (spec \u00a77: whitespace never blocks)
+            if (ch === '\r' || ch === '\n' || ch === ' ' || ch === '\t') { cur = prev; }
+            else cur = sideOfCharCtx(ch, symSide, text, i);
             if (cur !== prev) { segs.push([start, i, prev]); start = i; prev = cur; }
         }
         segs.push([start, text.length, prev]);
@@ -882,12 +994,34 @@ var cephostDispatch = (function () {
                 // with one font and destroy the ranges that did take. So we report
                 // the substitution and move on.
                 if (probs.length) {
+                    // Photoshop swapped some ranges to a fallback face (the
+                    // requested Latin display font lacks those glyphs). Self
+                    // repair, once: re-plan every substituted range with the
+                    // CJK font (broadest glyph coverage) and rewrite. If the
+                    // repair verifies clean the layer counts as fully applied.
                     _substituted = true;
-                    out.ok++;
-                    out.path = used.path;
-                    out.substituted.push(String(layer.name) + ' -> ' +
-                        '\u5b57\u4f53\u88ab Photoshop \u66ff\u6362\uff1a\u8bf7\u6c42 ' + probs[0].wanted + '\uff0c\u5b9e\u9645 ' + probs[0].got + '\uff08\u533a\u95f4 ' + probs[0].range + '\uff09' +
-                        ' [' + notes.join(' ') + ']');
+                    var repaired = repairPlanFromActual(used.plan, readRanges(layer.id, text.length), cnPS);
+                    var repairProbs = [];
+                    if (repaired.length) {
+                        try {
+                            stage('layer ' + (i + 1) + ' self-repair');
+                            applyRangesSafe(layer.id, repaired, text.length, notes);
+                            repairProbs = verifyPlan(layer.id, repaired, text.length);
+                        } catch (eR) {
+                            repairProbs = probs;   // repair failed: report the original verdict
+                        }
+                    }
+                    if (repairProbs.length) {
+                        out.ok++;
+                        out.path = used.path;
+                        out.substituted.push(String(layer.name) + ' -> ' +
+                            '\u5b57\u4f53\u88ab Photoshop \u66ff\u6362\uff1a\u8bf7\u6c42 ' + repairProbs[0].wanted + '\uff0c\u5b9e\u9645 ' + repairProbs[0].got + '\uff08\u533a\u95f4 ' + repairProbs[0].range + '\uff09' +
+                            ' [' + notes.join(' ') + ']');
+                    } else {
+                        _substituted = false;
+                        out.ok++;
+                        out.path = used.path + '+repair';
+                    }
                     for (var s = 0; s < notes.length; s++) if (!inArray(out.notes, notes[s])) out.notes.push(notes[s]);
                     continue;
                 }
@@ -934,9 +1068,18 @@ var cephostDispatch = (function () {
         stage('read-contents');
         var text = textContentsOf(layer);
         if (!text.length) {
-            out.emptyReason = 'empty-text';
-            out.emptyLayer = String(layer.name || '(unnamed)');
-            return jval(out);
+            // first text layer empty: per spec MD \u00a79 fall through to the
+            // next selected text layer instead of giving up
+            var li, found = false;
+            for (li = 1; li < layers.length; li++) {
+                text = textContentsOf(layers[li]);
+                if (text.length) { layer = layers[li]; found = true; break; }
+            }
+            if (!found) {
+                out.emptyReason = 'empty-text';
+                out.emptyLayer = String(layers[0].name || '(unnamed)');
+                return jval(out);
+            }
         }
 
         stage('read-ranges');
@@ -956,7 +1099,6 @@ var cephostDispatch = (function () {
         for (var k = 0; k < ranges.length; k++) {
             var rr = ranges[k];
             if (rr.to <= rr.from) continue;
-            if (rr.size == null) { unknown.cn = true; unknown.en = true; }
             var segs = segmentsOf(text.substring(rr.from, Math.min(rr.to, text.length)), 'auto');
             for (var s = 0; s < segs.length; s++) {
                 var side = segs[s][2] ? 'cn' : 'en';
@@ -970,12 +1112,17 @@ var cephostDispatch = (function () {
                     if (!cnFont && rr.psName) { var mf = metaOfPSName(rr.psName); if (mf) cnFont = { family: mf.family, style: mf.style }; }
                     if (!cnColor && rr.rgb) cnColor = rr.rgb;
                     if (rr.size != null) cnSizes[rr.size] = true;
+                    else unknown.cn = true;
                 } else {
                     if (!enFont && rr.psName) { var ef = metaOfPSName(rr.psName); if (ef) enFont = { family: ef.family, style: ef.style }; }
                     if (!enColor && rr.rgb) enColor = rr.rgb;
                     if (rr.size != null) enSizes[rr.size] = true;
+                    else unknown.en = true;
                 }
             }
+            // per-side size capture is complete in the block above; the old
+            // unconditional `unknown=true` when ONE range lacked a size
+            // mis-flagged mixed sizes for whole mixed-style layers.
         }
 
         stage('summarize');

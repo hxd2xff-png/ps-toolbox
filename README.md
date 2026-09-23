@@ -1,5 +1,17 @@
-### v1.7.2
+### v1.7.3（字符分类对齐识别规范 MD · 防卡死 · 自修复）
 
+- **字符分类全面对齐规范**（`font-mixer-character-classification.md`）：
+  - Unicode 罗马数字仅 **I..XII**（U+2160–216B / U+2170–217B）归中文字体；更大的（ⅬⅭⅮⅯ、ↀ 等）归英文；
+  - **ASCII 罗马数字（I/II/IV/XIV…XXV）**：格式合法、数值 ≤25、不嵌入编码（SKU-IV-A、MIX123、IV_CODE 保持英文）、单字母需紧邻中文；
+  - **罗马数字判定优先于「符号用中/英」开关**（与规范 §6 一致）；
+  - **空格/换行跟随前一字符**归属（规范 §7），多行/混排不再被空白切碎；
+  - 识别（回填表单）与应用使用**同一套分类**，识别遍历全部选中文本层；
+- **修「请求 Light 实际 Medium」**：所选字重缺失时，在同字体族内按字重就近回退，不再跨族乱换；同族字重规范化不再误报「被替换」；
+- **替换自修复**：某区间被 Photoshop 换成别的字体时，自动用中文字体重写该区间并回读校验；修不了才如实上报；
+- **防卡死**：
+  - 面板打开不再自动建临时文档自检（标签页不再闪一下），自检只在点击状态条时手动运行；
+  - PS 处于模态状态（原生拾色器等）时选区轮询完全暂停；有在飞调用时不叠发，轮询放宽至 800ms；
+  - 失败探针只在真实失败后运行一次；
 - Multi-selection now also resolves PS 20/21 index-form targetLayers references (previously only the active layer was applied)
 - Symbols (incl. halfwidth punctuation) default to the Chinese font in auto mode; CJK fonts carry both glyph sets so Photoshop no longer substitutes ranges
 - Optical kerning snapshots per-character fonts and restores them if the DOM write rolls mixed fonts back
@@ -25,7 +37,7 @@
 - 分区算法逐字符判定归属：汉字、假名、CJK 标点、**全角符号（（）、「」、￥等）**用中文字体；拉丁字母、数字、半角标点用英文字体；
 - **罗马数字/带圈数字默认归中文字体**（Ⅰ、Ⅱ、①等——中文展示字体都有这些字形，避免被 Photoshop 替换）；
 - **符号归属可调**：中/英卡片上各有一个「符号用中文 / 符号用英文」开关——
-  - 默认**自动**：全角标点归中文、半角标点归英文（与 Figma 版一致）；
+  - 默认**自动**：所有标点符号（含半角）都归中文字体——中文字体同时携带全/半角字形，纯拉丁展示字体常缺全角字形（这正是被 Photoshop 整段替换的根源）；
   - 开关对**所有**符号类字符生效（全角+半角标点、罗马数字、带圈数字），不会被默认规则覆盖；
   - 点「符号用中文」：所有符号（含半角标点）都用中文字体；
   - 点「符号用英文」：所有符号（含全角标点）都用英文字体；

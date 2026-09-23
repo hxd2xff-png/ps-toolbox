@@ -749,7 +749,7 @@
 
     // 面板期望的宿主版本：与 jsx/host.jsx 的 HOST_VERSION 一致。
     // 用于发现「PS 启动时 ScriptPath 已加载旧版宿主」并强制重载，无需重启 Photoshop。
-    const HOST_EXPECT = '4.6.0';
+    const HOST_EXPECT = '4.7.0';
     const EXT_DIR = (() => {
       try { return cs.getSystemPath(SystemPath.EXTENSION) || ''; } catch (e) { return ''; }
     })();
@@ -794,6 +794,8 @@
     let hostWaiters = [];
     const loggedOnce = {};   // 每种 API 只记一次原始回包，避免刷屏
     let writeProbed = false;  // 写入自检只跑一次
+    let busyCalls = 0;        // 在飞的宿主调用数（0 = 空闲）
+    let modalBusy = false;    // 拾色器等 PS 模态状态：轮询暂停
     function ensureHost(cb) {
       if (!CEP) return;
       if (hostReady) { if (cb) cb(true); return; }
@@ -848,7 +850,11 @@
           : ('宿主加载失败：' + info + '  —  点这里重试，详情见扩展目录 diag.log');
       }
       diagLog('host', (ok ? 'READY ' : 'FAIL ') + info);
-      if (ok) hostSelfTest();
+      // NOTE: no automatic self test on connect. The self test creates a real
+      // temp document, which flashed a new tab on every panel open and, while
+      // Photoshop was busy, could hang the UI. It now runs ONLY when the user
+      // clicks the status line (hostSelfTest), or after a font-mixer failure
+      // once per panel session - both are explicit user-visible moments.
       if (!ok) figmaNotify('宿主加载失败：' + info);
       const waiters = hostWaiters; hostWaiters = [];
       waiters.forEach((fn) => { try { fn(ok); } catch (e) {} });
@@ -858,13 +864,15 @@
     // 结果直接写进 diag.log，并显示在状态条上。用户文档完全不受影响。
     let selfTested = false;
     function hostSelfTest() {
-      if (selfTested || !CEP || !hostReady) return;
-      selfTested = true;
+      // 点击状态条触发：临时文档会开新标签页，不能在连接时自动跑。
+      if (selfTestRunning) return;
+      selfTestRunning = true;
       const args = {};
       if (fontSel.cn && fontSel.cn.family) args.cnFont = fontSel.cn;
       if (fontSel.en && fontSel.en.family) args.enFont = fontSel.en;
       diagLog('selftest', 'start ' + JSON.stringify(args));
       callHost('selftest', args, (st) => {
+        selfTestRunning = false;
         diagLog('selftest', JSON.stringify(st).slice(0, 700));
         const steps = (st && st.steps) || [];
         const has = (s) => steps.indexOf(s) >= 0;
@@ -887,11 +895,12 @@
     }
 
     // 点击状态行 = 手动重试一次加载（改完 jsx 文件后无需重启 PS）
+    let selfTestRunning = false;
     const hostStatusEl = document.getElementById('host-status');
     if (hostStatusEl) {
       hostStatusEl.addEventListener('click', () => {
         // 宿主已连接时：点一下 = 重跑一次自检（改了 jsx 后不必重启面板）
-        if (hostReady) { selfTested = false; hostSelfTest(); return; }
+        if (hostReady) { selfTestRunning = false; hostSelfTest(); return; }
         hostTried = false; hostErr = '';
         ensureHost();
       });
@@ -908,8 +917,11 @@
 
     function callHost(type, args, cb, noRetry) {
       if (!CEP) { setTimeout(() => { if (cb) cb({}); }, 0); return; }   // 预览：异步模拟 CEP 回包时序，避免 TDZ
+      busyCalls++;   // 任何在飞调用期间暂停选区轮询：evalScript 排队执行，
+                     // 排队过多正是「面板卡死 Photoshop」观感的来源之一
       const enc = args ? encodeURIComponent(JSON.stringify(args)) : '';
       evalScript(hostCallExpr(type, enc), (res) => {
+        busyCalls--;
         let data = null;
         try { data = JSON.parse(res); } catch (e) { data = { error: String(res) }; }
         const needHeal = (res === '__NOHOST__') || (res === 'EvalScript error.' && !hostReady);
@@ -930,8 +942,10 @@
           diagLog('failed', type + ' -> ' + JSON.stringify({
             name: f0.name, reason: f0.reason, stage: f0.stage, line: f0.line, trace: f0.trace, forms: f0.forms,
           }));
-          // 首次失败时自动做一次写入自检：在临时文本图层上逐项隔离，用完即删
-          if (type === 'font-mixer' && !writeProbed) {
+          // 首次失败时自动做一次写入自检：在临时文本图层上逐项隔离，用完即删。
+          // 只在确认失败时跑一次（应用成功不再触发）——临时文档会闪标签页，
+          // PS 忙时还有卡住 UI 的风险，必须留给真实失败场景。
+          if (type === 'font-mixer' && !writeProbed && data.failed && data.failed.length) {
             writeProbed = true;
             diagLog('probe', 'font-mixer 失败 → 运行写入自检（临时文档，用完删除）');
             callHost('selftest', null, (pw) => {
@@ -955,7 +969,8 @@
     // CEP 没有主动推送：选区变化用轮询签名模拟（与 Figma 版 selection-changed 等效）
     let lastSelSig = '';
     function pollSelection() {
-      if (!hostReady) return;   // 宿主不可用时不要每 500ms 空转
+      if (!hostReady) return;   // 宿主不可用时不要空转
+      if (busyCalls > 0 || modalBusy) return;   // 在飞调用 / PS 模态期间：排队只会造成假死
       callHost('sel-sig', null, (r) => {
         const sig = (r && r.sig) || '';
         if (sig !== lastSelSig) {
@@ -965,7 +980,28 @@
         }
       });
     }
-    setInterval(pollSelection, 500);
+    // 选区轮询防卡死三闸门：
+    //   1. 有在飞宿主调用时不叠发（evalScript 在 PS 主线程排队执行，
+    //      叠发会让队列无限增长，表现为 Photoshop 越用越卡直到假死）；
+    //   2. PS 处于模态状态（原生拾色器开着、进度条等）时完全停发——
+    //      模态期间 evalScript 会挂起排队，曾直接把 PS 卡住；
+    //   3. 轮询周期放宽到 800ms（识别选区变化足够快，主线程压力减 40%）。
+    // 模态状态用 CEP 事件监听（modalStateChanged），拾色器打开/关闭都推这里。
+    if (CEP && cs) {
+      try {
+        cs.addEventListener('com.adobe.csxs.events.modalStateChanged', (ev) => {
+          const d = ev && ev.data ? ev.data : null;
+          const state = d && (d.state || d.status);
+          modalBusy = String(state || '').toLowerCase() === 'enter';
+          diagLog('modal', 'modalStateChanged -> ' + state + ' (poll ' + (modalBusy ? 'paused' : 'resumed') + ')');
+        });
+      } catch (eM) { }
+    }
+    setInterval(pollSelection, 800);
+    setInterval(function pollGuard() {
+      // 模态结束后补一轮签名检查，避免错过模态期间发生的选择变化
+      if (!modalBusy && hostReady && busyCalls === 0) pollSelection();
+    }, 2000);
 
     function send(msg) {
       switch (msg.type) {

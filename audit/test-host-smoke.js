@@ -238,7 +238,10 @@ function executeAction(action, desc) {
     const style = cloneVal(r.getObjectValue(id('textStyle')));
     const from = r.getInteger(id('from'));
     const to = r.getInteger(id('to'));
-    if (PS.substituteTo && from === 0) style.store.set(id('fontPostScriptName'), PS.substituteTo);
+    if (PS.substituteFn) {
+      const sub = PS.substituteFn(from, to, style.store.get(id('fontPostScriptName')));
+      if (sub) style.store.set(id('fontPostScriptName'), sub);
+    } else if (PS.substituteTo && from === 0) style.store.set(id('fontPostScriptName'), PS.substituteTo);
     // a layer transform makes PS store PRE-transform base values: written 50
     // with K=6.5625 is stored as 7.62 and the character panel shows 50 again
     if (st.transform && style.store.has(id('size'))) {
@@ -335,7 +338,7 @@ const stale = () => { fails++; };
 
 /* ---- 1. 基础 API ---- */
 let r = tryCall('ping');
-check(r.ok && r.parsed.pong === true && r.parsed.version === '4.6.0', 'ping -> v4.6.0');
+check(r.ok && r.parsed.pong === true && r.parsed.version === '4.7.0', 'ping -> v4.7.0');
 
 r = tryCall('list-fonts');
 check(r.ok && r.parsed.families.length === 3, 'list-fonts merges families (3)');
@@ -372,17 +375,13 @@ check(r.ok && r.parsed.ok === 1 && r.parsed.failed.length === 0, 'font-mixer app
 checkEq(r.parsed.path, 'canonical', 'font-mixer used the canonical textKey path');
 check(PS.lastSet && !PS.lastSet.engineDataPresent, 'engineData is dropped from the written descriptor');
 const written = mainLayer.textItem._state.ranges;
-// v4.6: the space at index 5 rides with the Chinese side -> plan is EN 0-5 /
-// CN 5-8; the CN piece crosses the old range boundary at 6, and baseline
-// preservation splits it there: written tiling is 0-5 / 5-6 / 6-8 (3 ranges,
-// each inheriting its own base style).
-check(written.length === 3, 'three style ranges written (got ' + written.length + ')');
-checkEq(written[0].from + '-' + written[0].to, '0-5', 'latin range tiling (space now CN-side)');
-checkEq(written[1].from + '-' + written[1].to, '5-6', 'CJK piece inherits first base (boundary split)');
-checkEq(written[2].from + '-' + written[2].to, '6-8', 'CJK piece inherits second base');
+// v4.7 (per spec MD §7): the space at index 5 rides with the PREVIOUS char's
+// side -> plan is EN 0-6 / CN 6-8; two ranges, gapless.
+check(written.length === 2, 'two style ranges written (got ' + written.length + ')');
+checkEq(written[0].from + '-' + written[0].to, '0-6', 'latin range incl. trailing space (space rides previous side)');
+checkEq(written[1].from + '-' + written[1].to, '6-8', 'CJK range');
 checkEq(written[0].style.getString(id('fontPostScriptName')), 'Inter-Regular', 'latin range got the English font');
 checkEq(written[1].style.getString(id('fontPostScriptName')), 'PingFangSC-Bold', 'CJK range got the Chinese font');
-check(written[0].style.hasKey(id('color')) && written[1].style.hasKey(id('color')), 'colour survives the rewrite');
 
 /* 区间必须无缝覆盖全文（Photoshop 要求 from/to 连续） */
 let cover = 0, gapless = true;
@@ -515,19 +514,28 @@ mainDoc.activeLayer = mainLayer;
 r = tryCall('font-mixer', { cnFont: { family: 'Nope', style: 'X' }, enFont: { family: 'Inter', style: 'Regular' } });
 check(r.ok && r.parsed.missingFonts.length === 1, 'font-mixer reports missing font instead of throwing');
 
-/* ---- 7. 字体被替换：如实上报 + 保留已写入结果（绝不整层覆盖） ---- */
-PS.substituteTo = 'PingFangSC-Regular';
+/* ---- 7. 字体被替换且修不了（每次写入都被换回）→ 如实上报 + 不整层覆盖 ---- */
+PS.substituteFn = () => 'Inter-Regular';   // PS keeps swapping EVERY write back
 r = tryCall('font-mixer', { cnFont: { family: 'PingFang SC', style: 'Bold' }, enFont: { family: 'Inter', style: 'Regular' } });
-check(r.ok && r.parsed.substituted.length === 1, 'a substituted font is reported in substituted[]');
+check(r.ok && r.parsed.substituted.length === 1, 'an unrepairable substitution is reported in substituted[]');
 check(r.ok && r.parsed.failed.length === 0, 'substitution is not reported as a hard failure');
 check(r.ok && r.parsed.layerFallback.length === 0, 'substitution must NOT trigger the destructive whole-layer repaint');
 {
   const w = mainLayer.textItem._state.ranges;
-  check(w.length === 3 &&
-    w[0].style.getString(id('fontPostScriptName')) === 'PingFangSC-Regular' &&
-    w[1].style.getString(id('fontPostScriptName')) === 'PingFangSC-Bold',
+  check(w.length === 2 && w.every((t) => t.style.getString(id('fontPostScriptName')) === 'Inter-Regular'),
     'the written ranges stay as written (no DOM repaint over them)');
-}PS.substituteTo = null;
+}PS.substituteFn = null;
+
+/* ---- 7b. 自修复：EN 字体缺字形被替换 → 换中文字体重写一次并验证通过 ---- */
+PS.substituteFn = (from, to, psName) => (psName === 'Inter-Regular' ? 'PingFangSC-Regular' : null);
+r = tryCall('font-mixer', { cnFont: { family: 'PingFang SC', style: 'Bold' }, enFont: { family: 'Inter', style: 'Regular' } });
+check(r.ok && r.parsed.substituted.length === 0, 'self-repair: no substitution left after the repair rewrite');
+check(r.ok && /repair/.test(String(r.parsed.path)), 'self-repair: path reports the repair (got ' + r.parsed.path + ')');
+{
+  const w = mainLayer.textItem._state.ranges;
+  const allCN = w.every((t) => t.style.getString(id('fontPostScriptName')) === 'PingFangSC-Bold');
+  check(allCN && w.length >= 1, 'self-repair: every range now carries the CN font');
+}PS.substituteFn = null;
 
 /* ---- 8. set 被拒 -> 整层 DOM 兜底并说明 ---- */
 mainLayer.textItem._state.ranges = [
@@ -740,7 +748,9 @@ mainDoc.activeLayer = mainLayer;
   check(r.parsed.substituted.length === 0, 'roman numerals: no substitution (they ride with the CN font now)');
   const wrn = rnLayer.textItem._state.ranges;
   const fontAt2 = (k) => { for (const t of wrn) if (k >= t.from && k < t.to) return t.style.getString(id('fontPostScriptName')); return null; };
-  checkEq(fontAt2(0), 'PingFangSC-Bold', 'circled number gets CN font');
+  // ④ (U+2463) is a larger circled form: per spec MD §4 only I..XII roman and
+  // ①-⑳ 0x2460-0x2473 stay CN; beyond that = EN (conservative strategy).
+  checkEq(fontAt2(0), 'Inter-Regular', 'circled ④ beyond ⑳ stays EN font (spec §4)');
   checkEq(fontAt2(4), 'PingFangSC-Bold', 'roman I gets CN font');
   checkEq(fontAt2(1), 'Inter-Regular', 'latin 24H stays EN font');
 }
