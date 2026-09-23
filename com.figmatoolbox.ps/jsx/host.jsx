@@ -42,7 +42,7 @@
 
 var cephostDispatch = (function () {
 
-    var HOST_VERSION = '4.7.1';
+    var HOST_VERSION = '4.7.2';
     var _stage = 'init';
     function stage(s) { _stage = s; return s; }
 
@@ -808,12 +808,15 @@ var cephostDispatch = (function () {
                 if (a.to <= p.from || a.from >= p.to) continue;
                 got = a.psName || '(none)';
                 if (got !== p.psName) {
-                    // same family, different weight: the requested style is not
-                    // installed and Photoshop kept the nearest weight. The face
-                    // the user asked for IS on the glyphs - not a substitution.
+                    // Same family, different weight: Photoshop did not store the
+                    // requested face. This is still a FAILED write (the panel must
+                    // never show ok while the character panel shows another
+                    // weight) - flag it as a weight problem so the caller retries
+                    // once and reports "\u5b57\u91cd\u672a\u751f\u6548" honestly instead of
+                    // claiming success.
                     var wm = metaOfPSName(p.psName), wg = metaOfPSName(got);
-                    if (wm && wg && wm.family === wg.family) continue;
-                    problems.push({ wanted: p.psName, got: got, range: a.from + '-' + a.to, plan: p.from + '-' + p.to });
+                    var sameFamily = !!(wm && wg && wm.family === wg.family);
+                    problems.push({ wanted: p.psName, got: got, range: a.from + '-' + a.to, plan: p.from + '-' + p.to, weight: sameFamily });
                     break;
                 }
             }
@@ -985,6 +988,13 @@ var cephostDispatch = (function () {
         var cnPS = (args.cnFont && args.cnFont.family) ? psNameOf(args.cnFont.family, args.cnFont.style) : null;
         _lastPS = cnPS || '';
         var enPS = (args.enFont && args.enFont.family) ? psNameOf(args.enFont.family, args.enFont.style) : null;
+        // resolve record: panel request -> resolved PostScript name. Returned
+        // in the reply (ES3-safe string concat; jval picks it up automatically)
+        // so diag.log shows at a glance which face was really requested.
+        out.resolve = (args.cnFont && args.cnFont.family ? args.cnFont.family + '/' + (args.cnFont.style || '?') : '-') +
+            ' -> ' + (cnPS || 'NULL') + ' | ' +
+            (args.enFont && args.enFont.family ? args.enFont.family + '/' + (args.enFont.style || '?') : '-') +
+            ' -> ' + (enPS || 'NULL');
         if (args.cnFont && args.cnFont.family && !cnPS) out.missingFonts.push(args.cnFont.family + ' ' + args.cnFont.style);
         if (args.enFont && args.enFont.family && !enPS) out.missingFonts.push(args.enFont.family + ' ' + args.enFont.style);
         if (out.missingFonts.length) return jval(out);
@@ -1002,6 +1012,14 @@ var cephostDispatch = (function () {
                 var plan = fontPerChar(text, cnPS, enPS, args.cnSize, args.enSize, args.syncColor === false ? null : args.cnColor, args.syncColor === false ? null : args.enColor, args.symSide);
                 _trace = 'ranges=' + plan.length + ' cn=' + (cnPS || 'none') + ' en=' + (enPS || 'none');
                 var notes = [];
+                // spec MD 10.2: set the whole node to the CN face FIRST, so the
+                // base style carries the requested weight and range writes only
+                // flip the EN runs. This guarantees the Chinese font lands even
+                // when a range descriptor write is rejected outright.
+                if (cnPS) {
+                    try { layer.textItem.font = cnPS; }
+                    catch (eBC) { notes.push('base-cn:' + errText(eBC)); }
+                }
                 stage('layer ' + (i + 1) + ' write ' + plan.length + ' ranges');
                 var used = applyRangesSafe(layer.id, plan, text.length, notes);
                 stage('layer ' + (i + 1) + ' verify');
@@ -1015,25 +1033,30 @@ var cephostDispatch = (function () {
                     // Photoshop swapped some ranges to a fallback face (the
                     // requested Latin display font lacks those glyphs). Self
                     // repair, once: re-plan every substituted range with the
-                    // CJK font (broadest glyph coverage) and rewrite. If the
-                    // repair verifies clean the layer counts as fully applied.
+                    // CJK font (broadest glyph coverage) and rewrite. When the
+                    // problem is weight-only (same family), rewrite the SAME
+                    // plan once as a retry. repairProbs starts as the ORIGINAL
+                    // verdict: an empty repair must never turn a real problem
+                    // into a silent success.
                     _substituted = true;
                     var repaired = repairPlanFromActual(used.plan, readRanges(layer.id, text.length), cnPS);
-                    var repairProbs = [];
-                    if (repaired.length) {
-                        try {
-                            stage('layer ' + (i + 1) + ' self-repair');
-                            applyRangesSafe(layer.id, repaired, text.length, notes);
-                            repairProbs = verifyPlan(layer.id, repaired, text.length);
-                        } catch (eR) {
-                            repairProbs = probs;   // repair failed: report the original verdict
-                        }
+                    if (!repaired.length) repaired = used.plan;   // weight-only: retry as-is
+                    var repairProbs = probs;
+                    try {
+                        stage('layer ' + (i + 1) + ' self-repair');
+                        applyRangesSafe(layer.id, repaired, text.length, notes);
+                        repairProbs = verifyPlan(layer.id, repaired, text.length);
+                    } catch (eR) {
+                        repairProbs = probs;   // repair failed: report the original verdict
                     }
                     if (repairProbs.length) {
                         out.ok++;
                         out.path = used.path;
-                        out.substituted.push(String(layer.name) + ' -> ' +
-                            '\u5b57\u4f53\u88ab Photoshop \u66ff\u6362\uff1a\u8bf7\u6c42 ' + repairProbs[0].wanted + '\uff0c\u5b9e\u9645 ' + repairProbs[0].got + '\uff08\u533a\u95f4 ' + repairProbs[0].range + '\uff09' +
+                        var rp = repairProbs[0];
+                        var rpHead = rp.weight
+                            ? '\u5b57\u91cd\u672a\u751f\u6548\uff1a\u8bf7\u6c42 '
+                            : '\u5b57\u4f53\u88ab Photoshop \u66ff\u6362\uff1a\u8bf7\u6c42 ';
+                        out.substituted.push(String(layer.name) + ' -> ' + rpHead + rp.wanted + '\uff0c\u5b9e\u9645 ' + rp.got + '\uff08\u533a\u95f4 ' + rp.range + '\uff09' +
                             ' [' + notes.join(' ') + ']');
                     } else {
                         _substituted = false;

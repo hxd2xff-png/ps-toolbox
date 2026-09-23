@@ -749,7 +749,7 @@
 
     // 面板期望的宿主版本：与 jsx/host.jsx 的 HOST_VERSION 一致。
     // 用于发现「PS 启动时 ScriptPath 已加载旧版宿主」并强制重载，无需重启 Photoshop。
-    const HOST_EXPECT = '4.7.1';
+    const HOST_EXPECT = '4.7.2';
     const EXT_DIR = (() => {
       try { return cs.getSystemPath(SystemPath.EXTENSION) || ''; } catch (e) { return ''; }
     })();
@@ -1191,6 +1191,7 @@
       const el = $('#font-status');
       if (!el) return;
       if (fontGuard) { clearTimeout(fontGuard); fontGuard = null; }   // 收到结果即撤掉等待守卫
+      if (msg.resolve) diagLog('mix-resolve', msg.resolve);   // 面板请求了什么 vs 宿主解析成了什么，一行可查
       const failed = msg.failed || [];
       const missing = msg.missingFonts || [];
       if (msg.error) {
@@ -1604,6 +1605,8 @@
         cfg.cnColor = hexToRgb($('#cn-color').value);
         cfg.enColor = hexToRgb($('#en-color').value);
       }
+      // 请求侧日志：以后「面板显示 A 实际发出 B」一眼定位，不用再猜
+      diagLog('mix-req', JSON.stringify({ cn: cfg.cnFont, en: cfg.enFont, cnSize: cfg.cnSize, enSize: cfg.enSize, symSide: cfg.symSide || 'auto', color: !!withColor }));
       send({ type: 'font-mixer', config: cfg });
       lastSyncColor = !!withColor;   // 结果提示需要知道这次走的是哪半边
       // 立即反馈并启动等待守卫；主进程随后会回 font-mixer-start / font-mixer-done。

@@ -338,7 +338,7 @@ const stale = () => { fails++; };
 
 /* ---- 1. 基础 API ---- */
 let r = tryCall('ping');
-check(r.ok && r.parsed.pong === true && r.parsed.version === '4.7.0', 'ping -> v4.7.0');
+check(r.ok && r.parsed.pong === true && r.parsed.version === '4.7.2', 'ping -> v4.7.2');
 
 r = tryCall('list-fonts');
 check(r.ok && r.parsed.families.length === 3, 'list-fonts merges families (3)');
@@ -547,6 +547,20 @@ r = tryCall('font-mixer', { cnFont: { family: 'PingFang SC', style: 'Regular' },
 check(r.ok && r.parsed.ok === 1 && r.parsed.layerFallback.length === 1, 'a rejected descriptor falls back to the DOM write');
 check(r.ok && /dom-font:ok/.test(String(r.parsed.layerFallback[0])), 'the DOM fallback is reported with its result');
 PS.throwOnSet = null;
+
+/* ---- 8b. 同族字重未生效：必须如实上报「字重未生效」，绝不静默成功 ----
+   面板请求 PingFang SC / Bold，PS 把它存成同族的 Regular（字重静默回退）。
+   面板已显示 ok 而字符面板是另一个字重 = 用户报过的真机 bug。 */
+mainDoc.activeLayers = [fwLayer];
+mainDoc.activeLayer = fwLayer;
+PS.substituteTo = 'PingFangSC-Regular';
+r = tryCall('font-mixer', { cnFont: { family: 'PingFang SC', style: 'Bold' }, enFont: { family: 'Inter', style: 'Regular' } });
+check(r.ok && r.parsed.substituted.length === 1, 'weight mismatch is reported, never silent success');
+check(/字重未生效/.test(String(r.parsed.substituted[0])), 'reported with the weight-not-applied wording');
+check(r.ok && r.parsed.ok === 1, 'layer still counts as processed (written result stays)');
+PS.substituteTo = null;
+mainDoc.activeLayers = [mainLayer];   // 还原场景 10 的隐含前提（活动层 = mainLayer）
+mainDoc.activeLayer = mainLayer;
 
 /* ---- 9. selftest 在临时文档上跑完整链路 ---- */
 PS.substituteTo = null;

@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <ExtensionManifest ExtensionBundleId="com.figmatoolbox.ps"
-                   ExtensionBundleVersion="1.7.4"
+                   ExtensionBundleVersion="1.7.5"
                    ExtensionBundleName="盗版PS的工具箱"
                    Version="9.0">
   <ExtensionList>
-    <Extension Id="com.figmatoolbox.ps.panel" Version="1.7.4"/>
+    <Extension Id="com.figmatoolbox.ps.panel" Version="1.7.5"/>
   </ExtensionList>
   <ExecutionEnvironment>
     <HostList>
