@@ -42,7 +42,7 @@
 
 var cephostDispatch = (function () {
 
-    var HOST_VERSION = '4.5.0';
+    var HOST_VERSION = '4.6.0';
     var _stage = 'init';
     function stage(s) { _stage = s; return s; }
 
@@ -97,6 +97,12 @@ var cephostDispatch = (function () {
         // halfwidth, roman numerals, circled numbers) -- no default overrides it
         if (symSide === 'cn' && isSymbolChar(ch)) return true;
         if (symSide === 'en' && isSymbolChar(ch)) return false;
+        // AUTO default (v4.6.0): every symbol rides with the Chinese font.
+        // CJK fonts carry both fullwidth AND halfwidth punctuation glyphs;
+        // pure Latin display fonts often miss fullwidth forms, which is what
+        // made Photoshop silently substitute whole ranges (reported on real
+        // machines). Halfwidth ASCII letters/digits stay English-side.
+        if (isSymbolChar(ch)) return true;
         return isCJK(ch);
     }
 
@@ -203,7 +209,29 @@ var cephostDispatch = (function () {
        DOM activeLayers is unreliable with multi-selection in some Photoshop
        versions (returns only one layer or the group). The Action Manager
        property 'targetLayers' on the document descriptor is the authoritative
-       list; it yields indexed references we must resolve via itemIndex. */
+       list; its references are INDEX-based on PS 20/21 (getIdentifier()
+       throws), so each index is resolved to a real layer id through a DOM
+       stack walk of the document tree (bottom layer = DOM index 0, so AM
+       index n maps to DOM index n - 1). AM index references must NEVER be
+       built here (putIndex shapes fail writes on PS 21 - see header note). */
+    function docLayerStackIds() {
+        var d = docSafe();
+        if (!d) return null;
+        var ids = [];
+        try {
+            (function walk(container) {
+                var kids = null;
+                try { kids = asArray(container.layers); } catch (e) { kids = null; }
+                if (!kids) return;
+                for (var i = 0; i < kids.length; i++) {
+                    var l = kids[i];
+                    if (l && l.typename === 'LayerSet') { walk(l); continue; }
+                    try { ids.push(l.id); } catch (e2) { }
+                }
+            })(d);
+        } catch (eW) { return null; }
+        return ids.length ? ids : null;
+    }
     function targetLayerIds() {
         var ref = new ActionReference();
         ref.putProperty(S('property'), S('targetLayers'));
@@ -212,11 +240,28 @@ var cephostDispatch = (function () {
         try { d = executeActionGet(ref); } catch (e) { return null; }
         if (!d || !d.hasKey(S('targetLayers'))) return null;
         var list = d.getList(S('targetLayers'));
-        var ids = [], i;
+        var ids = [], i, needIndex = false;
         for (i = 0; i < list.count; i++) {
-            try { ids.push(list.getReference(i).getIdentifier()); } catch (e2) { }
+            try {
+                var got = list.getReference(i).getIdentifier();
+                if (got !== null && got !== undefined) ids.push(got);
+                else needIndex = true;
+            } catch (e2) { needIndex = true; }
         }
-        return ids;
+        // PS 20/21: references are index-form (1-based, bottom = 1); resolve
+        // them against the DOM stack so multi-selection really applies to all
+        // selected layers instead of silently falling back to the active one.
+        if (needIndex && !ids.length && list.count) {
+            var stack = docLayerStackIds();
+            for (i = 0; i < list.count && stack; i++) {
+                try {
+                    var idx = -1;
+                    try { idx = list.getReference(i).getIndex(); } catch (eNoIdx) { idx = -1; }
+                    if (idx > 0 && idx <= stack.length) ids.push(stack[idx - 1]);
+                } catch (e3) { }
+            }
+        }
+        return ids.length ? ids : null;
     }
 
     function layerById(idNum) {
@@ -675,11 +720,15 @@ var cephostDispatch = (function () {
     /* ---------------- text: segmentation ---------------- */
 
     function segmentsOf(text, symSide) {
-        var segs = [], start = 0, prev = false, i, cur;
+        var segs = [], start = 0, prev = false, i, cur, ch;
         if (!text || !text.length) return segs;
         prev = sideOfChar(text.charAt(0), symSide);
         for (i = 1; i < text.length; i++) {
-            cur = sideOfChar(text.charAt(i), symSide);
+            ch = text.charAt(i);
+            // line breaks carry no glyphs: let them ride with the previous
+            // character's side so consecutive lines merge into one range
+            // (multi-line layers stay gapless without pointless splits)
+            cur = (ch === '\r' || ch === '\n') ? prev : sideOfChar(ch, symSide);
             if (cur !== prev) { segs.push([start, i, prev]); start = i; prev = cur; }
         }
         segs.push([start, text.length, prev]);
@@ -911,6 +960,11 @@ var cephostDispatch = (function () {
             var segs = segmentsOf(text.substring(rr.from, Math.min(rr.to, text.length)), 'auto');
             for (var s = 0; s < segs.length; s++) {
                 var side = segs[s][2] ? 'cn' : 'en';
+                // spaces ride with either side; a whitespace-only segment says
+                // nothing about the font the user actually sees - skipping them
+                // keeps detection honest for mixed runs like "hello \u4e16\u754c"
+                var segTxt = text.substring(rr.from + segs[s][0], rr.from + segs[s][1]);
+                if (!/[^ \t\n\r\u00A0]/.test(segTxt)) continue;
                 seen[side] = true;
                 if (side === 'cn') {
                     if (!cnFont && rr.psName) { var mf = metaOfPSName(rr.psName); if (mf) cnFont = { family: mf.family, style: mf.style }; }
@@ -959,6 +1013,48 @@ var cephostDispatch = (function () {
         try { return (typeof AutoKernType !== 'undefined' && AutoKernType && AutoKernType.OPTICAL !== undefined); } catch (e) { return false; }
     }
 
+    /* ---- font snapshot / restore (auto-kerning safety net) ----
+       Photoshop's DOM textItem writes can silently roll a scripted
+       mixed-font state back to the font that was active before. These
+       three helpers snapshot per-character fonts, compare after the DOM
+       writes, and re-apply the exact fonts when they were clobbered. */
+    function fontSnapshotOf(layerId, textLen) {
+        var rr = readRanges(layerId, textLen), out = [], i;
+        for (i = 0; i < rr.length; i++) {
+            out.push({ from: rr[i].from, to: rr[i].to, psName: rr[i].psName || null });
+        }
+        return out;
+    }
+    function fontsDiffer(snap, now) {
+        if (!snap || !now || !snap.length || !now.length) return false;
+        var n = 0, i, j;
+        // count distinct font-covered chars in each; different counts = changed
+        for (i = 0; i < snap.length; i++) n += (snap[i].to - snap[i].from);
+        var m = 0;
+        for (j = 0; j < now.length; j++) m += (now[j].to - now[j].from);
+        if (n !== m) return true;
+        // same coverage: compare psName per overlapping span
+        for (i = 0; i < snap.length; i++) {
+            for (j = 0; j < now.length; j++) {
+                if (now[j].to <= snap[i].from || now[j].from >= snap[i].to) continue;
+                if ((now[j].psName || '') !== (snap[i].psName || '')) return true;
+            }
+        }
+        return false;
+    }
+    function snapshotPlan(snap, textLen) {
+        var out = [], i, p;
+        for (i = 0; i < snap.length; i++) {
+            p = snap[i];
+            if (!p.psName) continue;
+            if (p.from < 0) p.from = 0;
+            if (p.to > textLen) p.to = textLen;
+            if (p.to <= p.from) continue;
+            out.push({ from: p.from, to: p.to, psName: p.psName, size: null, rgb: null, trck: null });
+        }
+        return out;
+    }
+
     function applyAutoKerning(args) {
         stage('collect');
         var out = { nodes: 0, applied: 0, failed: 0, nothing: 0, empty: true, mode: 'optical', optical: 0, tracking: 0, leading: 0, leadingFailed: 0, leadingMode: '', leadingRequested: false, skipped: [], source: '' };
@@ -986,6 +1082,12 @@ var cephostDispatch = (function () {
         for (var i = 0; i < layers.length; i++) {
             var layer = layers[i];
             var opticalDone = false;
+            // DOM property writes (autoKerning / useAutoLeading) make Photoshop
+            // re-store the whole text object from its own cache, which can roll
+            // a just-applied mixed-font write back to the old font. Snapshot the
+            // per-character fonts first, compare after, re-apply if clobbered.
+            var kernText = textContentsOf(layer);
+            var fontSnap = (kernText.length) ? fontSnapshotOf(layer.id, kernText.length) : null;
             if (out.mode === 'optical') {
                 try {
                     stage('optical layer ' + (i + 1) + ' write');
@@ -1047,6 +1149,20 @@ var cephostDispatch = (function () {
                     }
                 }
                 if (!leadOk) out.leadingFailed++;
+            }
+            // DOM writes above may have rolled mixed fonts back (PS re-stores
+            // the whole text object from its cache). Restore the snapshot.
+            if (fontSnap && fontSnap.length) {
+                var afterKern = readRanges(layer.id, kernText.length);
+                if (fontsDiffer(fontSnap, afterKern)) {
+                    try {
+                        stage('font-restore layer ' + (i + 1));
+                        applyRanges(layer.id, snapshotPlan(fontSnap, kernText.length), kernText.length);
+                        out.fontRestored = (out.fontRestored || 0) + 1;
+                    } catch (eR) {
+                        if (!inArray(out.skipped, 'font-restore: ' + errText(eR))) out.skipped.push('font-restore: ' + errText(eR));
+                    }
+                }
             }
         }
         if (out.optical && !out.tracking) out.mode = 'optical';

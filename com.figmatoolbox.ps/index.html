@@ -749,7 +749,7 @@
 
     // 面板期望的宿主版本：与 jsx/host.jsx 的 HOST_VERSION 一致。
     // 用于发现「PS 启动时 ScriptPath 已加载旧版宿主」并强制重载，无需重启 Photoshop。
-    const HOST_EXPECT = '4.5.0';
+    const HOST_EXPECT = '4.6.0';
     const EXT_DIR = (() => {
       try { return cs.getSystemPath(SystemPath.EXTENSION) || ''; } catch (e) { return ''; }
     })();
@@ -1104,6 +1104,10 @@
     function fillFontFromDetect(msg) {
       if (currentScheme) return;
       setCurrentLabel('');
+      // user-picked fonts win over auto detection: once the user picks a font
+      // from the dropdown, detection from selection changes must not silently
+      // swap it back (the "panel shows OK but the font never changes" class).
+      // A preset load (applyPresetToForm) clears the flag via clearFontTouched.
       if (msg.empty) {
         // Distinguish why detection is empty instead of failing silently:
         // the form keeps whatever the user sees, the status line explains it.
@@ -1114,8 +1118,8 @@
         else if (msg.emptyReason === 'empty-text') { if (st) st.textContent = '文本图层' + nm + '没有文字内容，无法识别'; }
         return;
       }
-      if (msg.cnFont) setFontValue('cn', msg.cnFont);
-      if (msg.enFont) setFontValue('en', msg.enFont);
+      if (msg.cnFont && !fontTouched.cn) setFontValue('cn', msg.cnFont);
+      if (msg.enFont && !fontTouched.en) setFontValue('en', msg.enFont);
       if (!userTouched['#cn-size']) $('#cn-size').value = msg.cnSize != null ? msg.cnSize : '';
       if (!userTouched['#en-size']) $('#en-size').value = msg.enSize != null ? msg.enSize : '';
       $('#cn-size').placeholder = msg.cnSizeMixed ? '混合字号（留空保留）' : '如 14，留空不改';
@@ -1477,7 +1481,7 @@
       if (id === 'cn-font' || id === 'en-font') {
         const which = id === 'cn-font' ? 'cn' : 'en';
         ddRegistry[id] = initDropdown(root, {
-          onPick: (v) => { fontSel[which] = parseFont(v); },
+          onPick: (v) => { fontSel[which] = parseFont(v); fontTouched[which] = true; },
           // 字体库走「数据源」模式：不预铺 <option>，打开时才请求、
           // 按关键词即时筛选并限量渲染（详见 fontItems / requestFontList）
           getItems: (q) => fontItems(q),
@@ -1498,6 +1502,10 @@
       catch (e) { return null; }
     }
     let lastSyncColor = false;   // 最近一次应用是否带颜色（默认不调整颜色）
+
+    // 用户手选字体的闸门：手选后识别回填不再覆盖该侧；载入方案时清除。
+    const fontTouched = { cn: false, en: false };
+    function clearFontTouched() { fontTouched.cn = false; fontTouched.en = false; }
 
     /* ---- 符号归属开关：'' = 自动 / 'cn' = 符号用中文 / 'en' = 符号用英文 ----
        三态互斥，再点激活按钮恢复自动；持久化到 localStorage，方案里随存随取，
@@ -1703,6 +1711,7 @@
 
     function applyPresetToForm(p) {
       clearTouched();   // 载入方案是显式意图，方案值优先于「用户手动改过」的状态
+      clearFontTouched();   // 同理：方案字体也优先于「用户手选过字体」的闸门
       $('#cn-size').placeholder = '如 14，留空不改';
       $('#en-size').placeholder = '如 12，留空不改';
       if (p.cnFont) setFontValue('cn', p.cnFont);

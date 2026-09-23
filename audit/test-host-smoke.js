@@ -102,6 +102,13 @@ class FakeRef2 {
   constructor(idv) { this.idv = idv; }
   getIdentifier() { return this.idv; }
 }
+/* index-form reference: getIdentifier throws, getIndex returns the index
+   (mimics what PS 20/21 really hands back for targetLayers) */
+class FakeRefIdx {
+  constructor(idx) { this.idx = idx; }
+  getIdentifier() { throw new Error('no identifier (index-form ref)'); }
+  getIndex() { return this.idx; }
+}
 
 /* ---- 字体 ---- */
 const FONTS = [
@@ -197,8 +204,15 @@ function executeActionGet(ref) {
   }
   if (ref instanceof FakeRef && ref.property === id('targetLayers')) {
     if (PS.targetLayerIds === null) throw new Error('no targetLayers property');
-    const lst = new FakeList(PS.targetLayerIds.map((i) => new FakeRef2(i)));
+    // PS.targetLayerIdx: INDEX-form references (PS 20/21 quirk). When set,
+    // entries are FakeRef2 with no identifier; getIndex() yields the index.
+    const lst = PS.targetLayerIdx
+      ? new FakeList(PS.targetLayerIdx.map((i) => new FakeRefIdx(i)))
+      : new FakeList(PS.targetLayerIds.map((i) => new FakeRef2(i)));
     return new FakeDesc(new Map([[id('targetLayers'), lst]]));
+  }
+  if (ref instanceof FakeRef && ref.property === id('layerId') && ref.identifierKey === id('layer') && ref.identifierValue) {
+    throw new Error('AM layerId-by-index not used (host must resolve via DOM stack)');
   }
   if (ref instanceof FakeRef && ref.identifierKey === id('layer')) {
     // bare layer reference (id lookup): return name only
@@ -321,7 +335,7 @@ const stale = () => { fails++; };
 
 /* ---- 1. 基础 API ---- */
 let r = tryCall('ping');
-check(r.ok && r.parsed.pong === true && r.parsed.version === '4.5.0', 'ping -> v4.5.0');
+check(r.ok && r.parsed.pong === true && r.parsed.version === '4.6.0', 'ping -> v4.6.0');
 
 r = tryCall('list-fonts');
 check(r.ok && r.parsed.families.length === 3, 'list-fonts merges families (3)');
@@ -358,9 +372,14 @@ check(r.ok && r.parsed.ok === 1 && r.parsed.failed.length === 0, 'font-mixer app
 checkEq(r.parsed.path, 'canonical', 'font-mixer used the canonical textKey path');
 check(PS.lastSet && !PS.lastSet.engineDataPresent, 'engineData is dropped from the written descriptor');
 const written = mainLayer.textItem._state.ranges;
-check(written.length === 2, 'two style ranges written (got ' + written.length + ')');
-checkEq(written[0].from + '-' + written[0].to, '0-6', 'latin range tiling');
-checkEq(written[1].from + '-' + written[1].to, '6-8', 'CJK range tiling');
+// v4.6: the space at index 5 rides with the Chinese side -> plan is EN 0-5 /
+// CN 5-8; the CN piece crosses the old range boundary at 6, and baseline
+// preservation splits it there: written tiling is 0-5 / 5-6 / 6-8 (3 ranges,
+// each inheriting its own base style).
+check(written.length === 3, 'three style ranges written (got ' + written.length + ')');
+checkEq(written[0].from + '-' + written[0].to, '0-5', 'latin range tiling (space now CN-side)');
+checkEq(written[1].from + '-' + written[1].to, '5-6', 'CJK piece inherits first base (boundary split)');
+checkEq(written[2].from + '-' + written[2].to, '6-8', 'CJK piece inherits second base');
 checkEq(written[0].style.getString(id('fontPostScriptName')), 'Inter-Regular', 'latin range got the English font');
 checkEq(written[1].style.getString(id('fontPostScriptName')), 'PingFangSC-Bold', 'CJK range got the Chinese font');
 check(written[0].style.hasKey(id('color')) && written[1].style.hasKey(id('color')), 'colour survives the rewrite');
@@ -407,15 +426,17 @@ function makeSymLayer() {
   return l;
 }
 const symFontAt = (w, k) => { for (let t = 0; t < w.length; t++) if (k >= w[t].from && k < w[t].to) return w[t].style.getString(id('fontPostScriptName')); return null; };
-// auto: halfwidth ( ) stay English-side (historic behaviour)
+// auto (v4.6 default): ALL symbols ride with the Chinese font — fullwidth AND
+// halfwidth punctuation. Pure Latin display fonts often miss fullwidth glyphs,
+// which made Photoshop substitute whole ranges on real machines.
 let symLayer = makeSymLayer();
 r = tryCall('font-mixer', { cnFont: { family: 'PingFang SC', style: 'Bold' }, enFont: { family: 'Inter', style: 'Regular' } });
 check(r.ok && r.parsed.ok === 1 && r.parsed.path === 'canonical', 'symSide auto: mix runs on canonical path');
 let w = symLayer.textItem._state.ranges;
 checkEq(symFontAt(w, 0), 'Inter-Regular', 'symSide auto: latin H stays English');
-checkEq(symFontAt(w, 2), 'Inter-Regular', 'symSide auto: halfwidth ( stays English');
+checkEq(symFontAt(w, 2), 'PingFangSC-Bold', 'symSide auto: halfwidth ( rides with Chinese (v4.6 default)');
 checkEq(symFontAt(w, 3), 'PingFangSC-Bold', 'symSide auto: ideograph stays Chinese');
-checkEq(symFontAt(w, 5), 'Inter-Regular', 'symSide auto: halfwidth ) stays English');
+checkEq(symFontAt(w, 5), 'PingFangSC-Bold', 'symSide auto: halfwidth ) rides with Chinese (v4.6 default)');
 // cn: ALL symbols (halfwidth included) go to the Chinese font
 symLayer = makeSymLayer();
 r = tryCall('font-mixer', { cnFont: { family: 'PingFang SC', style: 'Bold' }, enFont: { family: 'Inter', style: 'Regular' }, symSide: 'cn' });
@@ -502,12 +523,11 @@ check(r.ok && r.parsed.failed.length === 0, 'substitution is not reported as a h
 check(r.ok && r.parsed.layerFallback.length === 0, 'substitution must NOT trigger the destructive whole-layer repaint');
 {
   const w = mainLayer.textItem._state.ranges;
-  check(w.length === 2 &&
+  check(w.length === 3 &&
     w[0].style.getString(id('fontPostScriptName')) === 'PingFangSC-Regular' &&
     w[1].style.getString(id('fontPostScriptName')) === 'PingFangSC-Bold',
     'the written ranges stay as written (no DOM repaint over them)');
-}
-PS.substituteTo = null;
+}PS.substituteTo = null;
 
 /* ---- 8. set 被拒 -> 整层 DOM 兜底并说明 ---- */
 mainLayer.textItem._state.ranges = [
@@ -688,6 +708,27 @@ check(r.ok && r.parsed.ok === 2 && r.parsed.total === 2, 'multi-select: both lay
 mainDoc.activeLayers = [mainLayer];
 mainDoc.activeLayer = mainLayer;
 
+/* ---- 15b. multi-selection with INDEX-form references (PS 20/21 quirk) ----
+   getIdentifier() throws on every entry; the host must resolve indexes
+   through the DOM stack (mainLayer is bottom -> AM idx 1, l2 -> idx 2). */
+{
+  const l2 = makeLayer('second text layer idx', [{ from: 0, to: 4, style: styleOf('Inter-Regular', 18, [0, 0, 0]) }]);
+  l2.textItem._state.text = 'ABcd';
+  mainDoc.layers = [mainLayer, l2];   // DOM stack order = AM index order
+  PS.targetLayerIds = [mainLayer.id, l2.id];
+  PS.targetLayerIdx = [1, 2];          // index-form: bottom = 1
+  r = tryCall('font-mixer', { cnFont: { family: 'PingFang SC', style: 'Bold' }, enFont: { family: 'Inter', style: 'Regular' } });
+  if (!(r.ok && r.parsed.ok === 2 && r.parsed.total === 2)) console.log('MULTI-IDX DEBUG', JSON.stringify(r.parsed).slice(0, 400));
+  check(r.ok && r.parsed.ok === 2 && r.parsed.total === 2, 'multi-select (index refs): both layers applied');
+  checkEq(r.parsed.source, 'targetLayers', 'multi-select (index refs): still the AM path');
+  checkEq(l2.textItem._state.ranges[0].style.getString(id('fontPostScriptName')), 'Inter-Regular', 'multi-select (index refs): second layer got the mix');
+  PS.targetLayerIdx = null;
+  PS.targetLayerIds = null;
+  mainDoc.layers = [mainLayer];
+}
+mainDoc.activeLayers = [mainLayer];
+mainDoc.activeLayer = mainLayer;
+
 /* ---- 16. roman numerals default to the Chinese font (substitution regression) ---- */
 {
   const rnLayer = makeLayer('roman layer', [{ from: 0, to: 7, style: styleOf('Inter-Regular', 18, [0, 0, 0]) }]);
@@ -702,6 +743,45 @@ mainDoc.activeLayer = mainLayer;
   checkEq(fontAt2(0), 'PingFangSC-Bold', 'circled number gets CN font');
   checkEq(fontAt2(4), 'PingFangSC-Bold', 'roman I gets CN font');
   checkEq(fontAt2(1), 'Inter-Regular', 'latin 24H stays EN font');
+}
+mainDoc.activeLayers = [mainLayer];
+mainDoc.activeLayer = mainLayer;
+
+/* ---- 17. multi-line text: every line gets fonts/sizes/colours ----
+   Style ranges cover the whole char stream INCLUDING newlines, so line
+   breaks must not create pointless splits (or worse, unassigned chars). */
+{
+  const ml = makeLayer('multi-line layer', [{ from: 0, to: 13, style: styleOf('Inter-Regular', 18, [0, 0, 0]) }]);
+  ml.textItem._state.text = '\u4e70\u5c31\u9001\nBuy\n\u4e70\u5c31\u9001';   // CN / EN / CN lines
+  const n = ml.textItem._state.text.length;
+  ml.textItem._state.ranges = [{ from: 0, to: n, style: styleOf('Inter-Regular', 18, [0, 0, 0]) }];
+  mainDoc.activeLayers = [ml];
+  mainDoc.activeLayer = ml;
+  r = tryCall('font-mixer', {
+    cnFont: { family: 'PingFang SC', style: 'Bold' },
+    enFont: { family: 'Inter', style: 'Regular' },
+    cnSize: 40, enSize: 20,
+    cnColor: { r: 1, g: 0, b: 0 }, enColor: { r: 0, g: 0, b: 1 },
+    syncColor: true,
+  });
+  check(r.ok && r.parsed.ok === 1 && r.parsed.path === 'canonical', 'multi-line: apply runs canonical');
+  const wml = ml.textItem._state.ranges;
+  const fml = (k) => { for (const t of wml) if (k >= t.from && k < t.to) return t; return null; };
+  // text: 买0 就1 送2 \n3 B4 u5 y6 \n7 买8 就9 送10 \n11 ... wait: 4+1+3+1+4 = 13
+  // indices: CN 0-3, \n 3, EN 4-7, \n 7, CN 8-12 -> newline rides with previous side
+  checkEq(fml(0) && fml(0).style.getString(id('fontPostScriptName')), 'PingFangSC-Bold', 'multi-line: line1 CN font');
+  checkEq(fml(3) && fml(3).style.getString(id('fontPostScriptName')), 'PingFangSC-Bold', 'multi-line: newline rides with line1 side');
+  checkEq(fml(5) && fml(5).style.getString(id('fontPostScriptName')), 'Inter-Regular', 'multi-line: line2 EN font');
+  checkEq(fml(7) && fml(7).style.getString(id('fontPostScriptName')), 'Inter-Regular', 'multi-line: newline rides with line2 side');
+  checkEq(fml(9) && fml(9).style.getString(id('fontPostScriptName')), 'PingFangSC-Bold', 'multi-line: line3 CN font');
+  checkEq(fml(0) && String(fml(0).style.store.get(id('size'))), '40', 'multi-line: CN size applied');
+  checkEq(fml(5) && String(fml(5).style.store.get(id('size'))), '20', 'multi-line: EN size applied');
+  const c0 = fml(0) && fml(0).style.store.get(id('color'));
+  const c5 = fml(5) && fml(5).style.store.get(id('color'));
+  check(c0 && c5 && c0 !== c5, 'multi-line: colours applied per side');
+  let mCov = 0, mTiling = true;
+  for (const t of wml) { if (t.from !== mCov) mTiling = false; mCov = t.to; }
+  check(mTiling && mCov === n, 'multi-line: ranges tile the whole text incl. newlines');
 }
 mainDoc.activeLayers = [mainLayer];
 mainDoc.activeLayer = mainLayer;

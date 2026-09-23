@@ -20,7 +20,7 @@ function check(cond, name) {
 const side = (ch, m) => vm.runInContext(`sideOf(${JSON.stringify(ch)}, ${JSON.stringify(m)})`, sandbox) ? 'CN' : 'EN';
 
 // halfwidth symbols
-check(side('(', 'auto') === 'EN', 'halfwidth ( auto -> EN');
+check(side('(', 'auto') === 'CN', 'halfwidth ( auto -> CN (v4.6 default: symbols ride with CN)');
 check(side('(', 'cn') === 'CN', 'halfwidth ( cn -> CN (switch honored)');
 check(side('(', 'en') === 'EN', 'halfwidth ( en -> EN');
 // fullwidth symbols

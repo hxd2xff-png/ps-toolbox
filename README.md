@@ -1,3 +1,11 @@
+### v1.7.2
+
+- Multi-selection now also resolves PS 20/21 index-form targetLayers references (previously only the active layer was applied)
+- Symbols (incl. halfwidth punctuation) default to the Chinese font in auto mode; CJK fonts carry both glyph sets so Photoshop no longer substitutes ranges
+- Optical kerning snapshots per-character fonts and restores them if the DOM write rolls mixed fonts back
+- Line breaks ride with the previous character side: multi-line layers get fonts/sizes/colours on every line without pointless splits
+- Panel: user-picked fonts are no longer overwritten by selection-change auto detection (preset load still wins)
+
 # 盗版PS的工具箱 · Photoshop 字体混排插件
 
 一个 Photoshop CEP 面板插件：**中英文一键混排**（中文字符用中文字体、拉丁字符用英文字体）、
