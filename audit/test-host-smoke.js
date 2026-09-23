@@ -338,7 +338,7 @@ const stale = () => { fails++; };
 
 /* ---- 1. 基础 API ---- */
 let r = tryCall('ping');
-check(r.ok && r.parsed.pong === true && r.parsed.version === '4.7.2', 'ping -> v4.7.2');
+check(r.ok && r.parsed.pong === true && r.parsed.version === '4.7.3', 'ping -> v4.7.3');
 
 r = tryCall('list-fonts');
 check(r.ok && r.parsed.families.length === 3, 'list-fonts merges families (3)');

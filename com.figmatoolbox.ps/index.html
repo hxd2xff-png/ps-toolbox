@@ -749,7 +749,7 @@
 
     // 面板期望的宿主版本：与 jsx/host.jsx 的 HOST_VERSION 一致。
     // 用于发现「PS 启动时 ScriptPath 已加载旧版宿主」并强制重载，无需重启 Photoshop。
-    const HOST_EXPECT = '4.7.2';
+    const HOST_EXPECT = '4.7.3';
     const EXT_DIR = (() => {
       try { return cs.getSystemPath(SystemPath.EXTENSION) || ''; } catch (e) { return ''; }
     })();
@@ -940,7 +940,10 @@
           });
           return;
         }
-        if (!loggedOnce[type]) {
+        // 诊断：识别/应用/微调的每一次回包都记（含图层 id），选区与应用目标才能对账；
+        // 其余 API（list-fonts 等大回包）仍只记第一次，避免刷屏。
+        const alwaysLog = (type === 'detect-font' || type === 'font-mixer' || type === 'auto-kerning');
+        if (alwaysLog || !loggedOnce[type]) {
           loggedOnce[type] = true;
           diagLog('reply', type + ' -> ' + String(res).slice(0, 600));
         }
@@ -983,6 +986,8 @@
         if (sig !== lastSelSig) {
           const first = !lastSelSig;   // 首次只记录，不触发识别
           lastSelSig = sig;
+          // 证据通道：每次选区变化记 id + 来源 + targetLayers 失败原因
+          diagLog('sel', 'sig=' + sig + ' from=' + ((r && r.from) || '?') + ' tl=' + ((r && r.tl) || '?'));
           if (!first) detectActive();
         }
       });
@@ -1148,7 +1153,11 @@
     markTouched();
 
     function fillFontFromDetect(msg) {
-      if (currentScheme) return;
+      const dlyr = msg.layer ? ('#' + msg.layer.id + ' ' + (msg.layer.name || '')) : '?';
+      if (currentScheme) {
+        diagLog('fill', 'BLOCKED-scheme layer=' + dlyr + ' cn=' + JSON.stringify(msg.cnFont || null) + ' en=' + JSON.stringify(msg.enFont || null));
+        return;
+      }
       setCurrentLabel('');
       // user-picked fonts win over auto detection: once the user picks a font
       // from the dropdown, detection from selection changes must not silently
@@ -1157,6 +1166,7 @@
       if (msg.empty) {
         // Distinguish why detection is empty instead of failing silently:
         // the form keeps whatever the user sees, the status line explains it.
+        diagLog('fill', 'empty:' + (msg.emptyReason || '?') + ' from=' + (msg.source || '?'));
         const st = $('#font-status');
         const nm = msg.emptyLayer ? ('「' + msg.emptyLayer + '」') : '';
         if (msg.emptyReason === 'no-selection') { if (st) st.textContent = '未选中任何图层（选中文字图层后自动识别）'; }
@@ -1164,6 +1174,17 @@
         else if (msg.emptyReason === 'empty-text') { if (st) st.textContent = '文本图层' + nm + '没有文字内容，无法识别'; }
         return;
       }
+      // 证据通道：这次识别回填了什么、被哪道手选闸门挡住，全部入日志
+      const fillBlocked = [];
+      if (msg.cnFont && fontTouched.cn) fillBlocked.push('fontTouched.cn');
+      if (msg.enFont && fontTouched.en) fillBlocked.push('fontTouched.en');
+      if (msg.cnSize != null && userTouched['#cn-size']) fillBlocked.push('sizeTouched.cn');
+      if (msg.enSize != null && userTouched['#en-size']) fillBlocked.push('sizeTouched.en');
+      if (msg.cnColor && userTouched['#cn-color']) fillBlocked.push('colorTouched.cn');
+      if (msg.enColor && userTouched['#en-color']) fillBlocked.push('colorTouched.en');
+      diagLog('fill', (fillBlocked.length ? ('partial[' + fillBlocked.join(',') + ']') : 'ok') +
+        ' layer=' + dlyr + ' cn=' + JSON.stringify(msg.cnFont || null) + ' en=' + JSON.stringify(msg.enFont || null) +
+        ' size=' + String(msg.cnSize != null ? msg.cnSize : '-') + '/' + String(msg.enSize != null ? msg.enSize : '-'));
       if (msg.cnFont && !fontTouched.cn) setFontValue('cn', msg.cnFont);
       if (msg.enFont && !fontTouched.en) setFontValue('en', msg.enFont);
       if (!userTouched['#cn-size']) $('#cn-size').value = msg.cnSize != null ? msg.cnSize : '';
@@ -1192,6 +1213,11 @@
       if (!el) return;
       if (fontGuard) { clearTimeout(fontGuard); fontGuard = null; }   // 收到结果即撤掉等待守卫
       if (msg.resolve) diagLog('mix-resolve', msg.resolve);   // 面板请求了什么 vs 宿主解析成了什么，一行可查
+      // 证据通道：这次应用的目标层 id 列表 + 来源 + 替换上报
+      diagLog('mix-done', 'source=' + (msg.source || '?') + ' ok=' + (msg.ok != null ? msg.ok : '?') + '/' + (msg.total != null ? msg.total : '?') +
+        ' tl=' + (msg.tl || '?') + ' applied=' + JSON.stringify(msg.applied || []) +
+        (msg.substituted && msg.substituted.length ? ' sub=' + JSON.stringify(msg.substituted) : '') +
+        (msg.layerFallback && msg.layerFallback.length ? ' fallback=' + JSON.stringify(msg.layerFallback) : ''));
       const failed = msg.failed || [];
       const missing = msg.missingFonts || [];
       if (msg.error) {

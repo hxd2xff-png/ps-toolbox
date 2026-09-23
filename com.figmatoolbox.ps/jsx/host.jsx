@@ -42,7 +42,7 @@
 
 var cephostDispatch = (function () {
 
-    var HOST_VERSION = '4.7.2';
+    var HOST_VERSION = '4.7.3';
     var _stage = 'init';
     function stage(s) { _stage = s; return s; }
 
@@ -300,14 +300,20 @@ var cephostDispatch = (function () {
         } catch (eW) { return null; }
         return ids.length ? ids : null;
     }
+    /* _tlWhy: why the authoritative targetLayers path produced nothing.
+       Evidence channel only - written into sel-sig / detect / apply replies so
+       diag.log shows WHICH of the three silent failure modes (throw / no-key /
+       index-resolve-fail) actually happens on a given machine. */
+    var _tlWhy = 'not-run';
     function targetLayerIds() {
         var ref = new ActionReference();
         ref.putProperty(S('property'), S('targetLayers'));
         ref.putEnumerated(S('document'), S('ordinal'), S('targetEnum'));
         var d;
-        try { d = executeActionGet(ref); } catch (e) { return null; }
-        if (!d || !d.hasKey(S('targetLayers'))) return null;
-        var list = d.getList(S('targetLayers'));
+        try { d = executeActionGet(ref); } catch (e) { _tlWhy = 'throw:' + errText(e); return null; }
+        if (!d || !d.hasKey(S('targetLayers'))) { _tlWhy = d ? 'no-key' : 'null-get'; return null; }
+        var list = null;
+        try { list = d.getList(S('targetLayers')); } catch (eL) { _tlWhy = 'list-throw:' + errText(eL); return null; }
         var ids = [], i, needIndex = false;
         for (i = 0; i < list.count; i++) {
             try {
@@ -329,6 +335,7 @@ var cephostDispatch = (function () {
                 } catch (e3) { }
             }
         }
+        _tlWhy = ids.length ? ('ok:' + ids.length) : ('idx-fail count=' + list.count);
         return ids.length ? ids : null;
     }
 
@@ -971,11 +978,12 @@ var cephostDispatch = (function () {
 
     function applyFontMix(args) {
         stage('collect');
-        var out = { ok: 0, failed: [], missingFonts: [], notes: [], timedOut: false, total: 0, empty: true, source: '', layerFallback: [], substituted: [], path: '' };
+        var out = { ok: 0, failed: [], missingFonts: [], notes: [], timedOut: false, total: 0, empty: true, source: '', layerFallback: [], substituted: [], path: '', applied: [] };
         var src = activeLayerSource();
         var layers = [];
         walkLayers(src.refs, function (l) { if (isTextLayer(l)) layers.push(l); });
         out.source = src.from;
+        out.tl = _tlWhy;
         out.total = layers.length;
         out.empty = layers.length === 0;
         if (!layers.length) {
@@ -1003,6 +1011,7 @@ var cephostDispatch = (function () {
         for (var i = 0; i < layers.length; i++) {
             var layer = layers[i];
             var text = '';
+            out.applied.push(layer.id);   // Evidence channel: layers actually processed
             try {
                 _substituted = false;   // per layer: never leak the previous verdict
                 stage('layer ' + (i + 1) + '/' + layers.length + ' read');
@@ -1096,6 +1105,7 @@ var cephostDispatch = (function () {
         var layers = [];
         walkLayers(src.refs, function (l) { if (isTextLayer(l)) layers.push(l); });
         out.source = src.from;
+        out.tl = _tlWhy;
         out.layerCount = src.refs.length;
         if (!layers.length) {
             // Distinguish "nothing selected" from "selection has no text layers"
@@ -1123,6 +1133,11 @@ var cephostDispatch = (function () {
             }
         }
 
+        // Evidence channel: the layer detection actually read (id/name),
+        // reconciled against the ids reported by sel-sig.
+        var detName = '';
+        try { detName = String(layer.name || ''); } catch (eDN) { }
+        out.layer = { id: layer.id, name: detName };
         stage('read-ranges');
         var ranges = readRanges(layer.id, text.length);
         var K = layerScaleOf(layer.id);   // report panel-equivalent sizes
@@ -1586,7 +1601,7 @@ var cephostDispatch = (function () {
             }
         }
         stage('serialize');
-        return jval({ sig: ids.join(','), from: src.from });
+        return jval({ sig: ids.join(','), from: src.from, tl: _tlWhy });
     }
 
     /* ---------------- Photoshop native color picker ----------------

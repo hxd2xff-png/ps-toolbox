@@ -1,6 +1,6 @@
 {
   "name": "ps-toolbox",
-  "version": "1.7.5",
+  "version": "1.7.6",
   "private": true,
   "description": "盗版PS的工具箱 - Photoshop 中英文字体混排 / 符号自动微调 / 方案预设 CEP 插件（PS 2019+）",
   "scripts": {
