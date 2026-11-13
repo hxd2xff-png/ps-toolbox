@@ -22,6 +22,13 @@ test('waiting dropdown settles failure through real applyFontList and refreshes 
 test('pending font request shows loading and is deduplicated',()=>{const h=harness({deferFonts:true});h.start();h.open();h.open();assert.equal(h.calls.filter(x=>x==='list-fonts').length,1);assert.match(h.state().text,/正在加载/);h.complete('list-fonts',{families:[]});assert.equal(h.state().text,'');assert.equal(h.statuses['#font-status'].textContent,'字体库为空');});
 test('font timeout clears loading and ignores late success then explicit reconnect recovers',()=>{const h=harness({deferFonts:true});h.start();h.advance(15000);assert.equal(h.state().fontLoading,false);assert.match(h.state().text,/超时/);h.complete('list-fonts',{families:[{family:'late',styles:['Regular']}]});assert.equal(h.state().fontFamilies.length,0);h.run('hostTried=false;hostErr="";ensureHost()');assert.match(h.state().text,/正在加载/);h.complete('list-fonts',{families:[{family:'Test',styles:['Regular']}]});assert.equal(h.state().fontFamilies[0].family,'Test');assert.equal(h.state().fontError,'');assert.equal(h.statuses['#font-status'].textContent,'字体库已加载');});
 test('malformed font reply is failure distinct from valid empty font list',()=>{const h=harness({deferFonts:true});h.start();h.complete('list-fonts',{});assert.match(h.state().text,/返回格式无效/);h.open();h.complete('list-fonts',{families:[]});assert.equal(h.state().fontError,'');assert.equal(h.statuses['#font-status'].textContent,'字体库为空');});
+test('real dropdown clearing removes stale visible font title',()=>{
+ const marks=new Set(),sel={value:'old',options:[{value:'old',textContent:'Old Font'}],get selectedOptions(){return this.options.filter(o=>o.value===this.value)}};
+ const b={sel,root:{dataset:{placeholder:'选择字体…'}},current:{textContent:'Old Font',classList:{add:x=>marks.add(x),remove:x=>marks.delete(x)}}};
+ vm.createContext(b);vm.runInContext(part('      function syncDisplay()', '      function build(q)')+part('      function setValue(value, label)', '      function open()'),b);
+ vm.runInContext('setValue("")',b);assert.equal(sel.value,'');assert.equal(b.current.textContent,'选择字体…');assert.ok(marks.has('empty'));
+ vm.runInContext('setValue("old");setValue(null)',b);assert.equal(b.current.textContent,'选择字体…');
+});
 test('real dropdown build renders waiting loading failure and valid empty separately',()=>{
  const emptyEl={style:{}},list={innerHTML:''};
  const b={emptyEl,list,opts:{getItems:()=>null,getStateText:()=> '等待宿主连接…'}};

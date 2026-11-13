@@ -1,0 +1,5 @@
+'use strict';
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const read=n=>fs.readFileSync(path.join(__dirname,'..',n),'utf8');
+test('installer stops after failed removal or directory creation before copying',()=>{const s=read('install-photoshop-plugin.bat');assert.match(s,/rmdir \/s \/q "%DST%"\s+if exist "%DST%" \([\s\S]*?exit \/b 1\s+\)\s+mkdir "%DST%"\s+if errorlevel 1 \([\s\S]*?exit \/b 1\s+\)\s+robocopy/);assert.match(s,/if not exist "%EXT%" \([\s\S]*?exit \/b 1/);assert.match(s,/robocopy[^\n]*\nif errorlevel 8 \([\s\S]*?exit \/b 1/);});
+test('uninstaller reports removal success only after checking directory and registry failures',()=>{const s=read('uninstall-photoshop-plugin.bat');assert.match(s,/rmdir \/s \/q "%DST%"\s+if exist "%DST%" \([\s\S]*?exit \/b 1\s+\)\s+echo Removed plugin/);assert.match(s,/reg query[^\n]*\nif errorlevel 1 \([\s\S]*?exit \/b 1/);assert.match(s,/reg delete[^\n]*\nif errorlevel 1 \([\s\S]*?exit \/b 1\s+\)\s+echo Removed registry/);});

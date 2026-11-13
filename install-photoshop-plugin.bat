@@ -12,8 +12,20 @@ if not exist "%SRC%\CSXS\manifest.xml" (
 )
 
 if not exist "%EXT%" mkdir "%EXT%"
+if not exist "%EXT%" (
+  echo [ERROR] Could not create extension directory.
+  exit /b 1
+)
 if exist "%DST%" rmdir /s /q "%DST%"
+if exist "%DST%" (
+  echo [ERROR] Could not remove previous plugin directory.
+  exit /b 1
+)
 mkdir "%DST%"
+if errorlevel 1 (
+  echo [ERROR] Could not create plugin directory.
+  exit /b 1
+)
 
 robocopy "%SRC%" "%DST%" /E /COPY:DAT /R:1 /W:1 /NFL /NDL /NJH /NJS /NP >nul
 if errorlevel 8 (

@@ -771,7 +771,7 @@
 
     // 面板期望的宿主版本：与 jsx/host.jsx 的 HOST_VERSION 一致。
     // 用于发现「PS 启动时 ScriptPath 已加载旧版宿主」并强制重载，无需重启 Photoshop。
-    const HOST_EXPECT = '4.4.6';
+    const HOST_EXPECT = '4.4.7';
     const EXT_DIR = (() => {
       try { return cs.getSystemPath(SystemPath.EXTENSION) || ''; } catch (e) { return ''; }
     })();
@@ -1633,7 +1633,7 @@
       // 程序化赋值：若目标值不在选项里（例如识别到本机字体列表之外的字体），
       // 自动补一条选项，避免 select.value 被浏览器清空 → 后续取值拿到空字符串。
       function setValue(value, label) {
-        if (value == null || value === '') return;
+        if (value == null || value === '') { sel.value = ''; syncDisplay(); return; }
         let hit = Array.from(sel.options).find((o) => o.value === value);
         if (!hit) {
           hit = new Option(label || value, value);

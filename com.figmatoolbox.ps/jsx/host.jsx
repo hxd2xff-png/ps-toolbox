@@ -42,7 +42,7 @@
 
 var cephostDispatch = (function () {
 
-    var HOST_VERSION = '4.4.6';
+    var HOST_VERSION = '4.4.7';
     var _writeAttempted = false;
     var _stage = 'init';
     function stage(s) { _stage = s; return s; }
@@ -299,7 +299,7 @@ var cephostDispatch = (function () {
         ids.sort(function(a,b){return a-b;});
         var sig = docId + ':' + ids.join(',');
         if (!notes.length && _autoSelection && _autoSelection.sig === sig) return _autoSelection;
-        var layers = [], seen = {};
+        var layers = [], seen = {}, containsGroup = false;
         function descriptor(id, index) {
             var r = new ActionReference();
             if (index) r.putIndex(S('layer'), id);
@@ -343,6 +343,7 @@ var cephostDispatch = (function () {
                 var v = descriptor(ids[n], false);
                 if (v.getInteger(S('layerID')) !== ids[n]) throw new Error('layer-id-mismatch');
                 if (section(v) !== S('layerSectionStart')) { add(v); continue; }
+                containsGroup = true;
                 // AM group children occupy lower indices, ending at its sectionEnd.
                 var groupIndex = v.getInteger(S('itemIndex'));
                 var atIndex = null;
@@ -370,7 +371,8 @@ var cephostDispatch = (function () {
         var result = {sig:sig, from:notes.length ? 'automatic-active-or-partial' : 'targetLayersIDs',
             layers:layers, selectedCount:ids.length, notes:notes};
         // Failed reads stay retryable on the next poll.
-        _autoSelection = notes.length ? null : result;
+        // A stable selected group ID does not imply stable children.
+        _autoSelection = (notes.length || containsGroup) ? null : result;
         return result;
     }
 
@@ -612,9 +614,27 @@ var cephostDispatch = (function () {
         _layerScale = layerScaleOf(layerId, tk);   // share this read with transform lookup
         var old = tk.getList(S('textStyleRange'));
         var list = new ActionList();
+        // Intersect new overrides with old style boundaries so unspecified
+        // fields retain each original range's size, color, tracking and metadata.
+        var split = [], pi, oi, cuts, start, end, cut, original, part, key;
+        for (pi = 0; pi < plan.length; pi++) {
+            original = plan[pi]; cuts = [original.from, original.to];
+            for (oi = 0; oi < old.count; oi++) {
+                part = old.getObjectValue(oi);
+                start = part.getInteger(S('from')); end = part.getInteger(S('to'));
+                if (start > original.from && start < original.to) cuts.push(start);
+                if (end > original.from && end < original.to) cuts.push(end);
+            }
+            cuts.sort(function(a,b){return a-b;});
+            for (cut = 1; cut < cuts.length; cut++) {
+                if (cuts[cut] === cuts[cut-1]) continue;
+                part = {}; for (key in original) if (original.hasOwnProperty(key)) part[key] = original[key];
+                part.from = cuts[cut-1]; part.to = cuts[cut]; split.push(part);
+            }
+        }
         var i, seg, base, item, style;
-        for (i = 0; i < plan.length; i++) {
-            seg = plan[i];
+        for (i = 0; i < split.length; i++) {
+            seg = split[i];
             base = pickBaseRange(old, seg.from);
             item = base ? copyDesc(base) : new ActionDescriptor();
             style = hasKey(item, 'textStyle') ? copyDesc(item.getObjectValue(S('textStyle'))) : new ActionDescriptor();

@@ -927,6 +927,16 @@ test('automatic selection scans selected nested group only, deduplicates mixed t
     assert.equal(h.reads.includes(16),false);assert.equal(h.stats().walks,0);assert.deepEqual(plain(r.notes),[]);
   }
 });
+test('selected group refreshes children without changing selected group ID',()=>{
+ const entries=[{layerID:40,layerSection:'layerSectionStart',itemIndex:3},{layerID:20,layerKind:3,itemIndex:2,name:'Old'},{layerID:19,layerSection:'layerSectionEnd',itemIndex:1}];
+ const h=automaticHarness([40],entries);
+ assert.deepEqual(plain(h.box.automaticSelection().layers).map(l=>l.id),[20]);
+ entries[1]={layerID:21,layerKind:3,itemIndex:2,name:'New'};
+ assert.deepEqual(plain(h.box.automaticSelection().layers).map(l=>l.id),[21]);
+ entries[1]={layerID:22,layerKind:1,itemIndex:2};
+ assert.equal(h.box.automaticSelection().layers.length,0);
+ assert.equal(h.stats().walks,0);
+});
 test('nontext selection and startup diagnostic never scan document layers or fonts',()=>{
   const h=automaticHarness([1],[{layerID:1,layerKind:1}]);
   Object.defineProperty(h.box.app,'fonts',{get(){throw Error('font enumeration');}});
