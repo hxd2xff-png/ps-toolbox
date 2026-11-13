@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ExtensionList>
+  <Extension Id="com.figmatoolbox.ps.panel">
+    <HostList>
+      <Host Name="PHXS" Port="8092"/>
+      <Host Name="PHSP" Port="8092"/>
+    </HostList>
+  </Extension>
+</ExtensionList>

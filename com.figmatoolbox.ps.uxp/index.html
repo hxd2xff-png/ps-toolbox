@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="panel.css"></head>
+<body>
+<div class="title">字体混排 · UXP</div>
+<div class="hint">Photoshop 2024+ · 独立开发预览版 · 区间写入待真机验收</div>
+<div class="columns">
+<div class="side"><div>中文侧</div><label>字距 tracking（留空保留）<input id="cn-tracking" type="number" step="1"></label><label>字体<select id="cn-font"><option value="">请选择字体</option></select></label><label>字号<input id="cn-size" type="number" min="0.1" placeholder="留空保留"></label><label>颜色<input id="cn-color" type="text" placeholder="#RRGGBB，留空保留"></label></div>
+<div class="side"><div>英文侧</div><label>字距 tracking（留空保留）<input id="en-tracking" type="number" step="1"></label><label>字体<select id="en-font"><option value="">请选择字体</option></select></label><label>字号<input id="en-size" type="number" min="0.1" placeholder="留空保留"></label><label>颜色<input id="en-color" type="text" placeholder="#RRGGBB，留空保留"></label></div>
+</div>
+<div class="actions"><button id="detect">识别选中图层</button><button id="reset">恢复识别回填</button></div>
+<div class="actions"><button id="apply">应用混排</button><button id="apply-color">应用混排与颜色</button></div>
+<div class="presets"><label>方案<select id="preset"><option value="">当前识别 / 用户值</option></select></label><input id="preset-name" placeholder="新方案名称"><button id="save">保存方案</button><button id="remove">删除方案</button></div>
+<div id="status" role="status">正在读取字体库…</div>
+<script src="panel.js"></script>
+</body></html>

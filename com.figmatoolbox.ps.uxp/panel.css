@@ -1,0 +1,11 @@
+body { padding: 14px; color: #e5e5e5; background: #292929; font-size: 12px; }
+.title { font-size: 18px; font-weight: bold; margin-bottom: 6px; }
+.hint { color: #b5b5b5; margin-bottom: 16px; }
+.columns { display: flex; flex-direction: row; }
+.side { width: 50%; padding-right: 8px; }
+label { display: flex; flex-direction: column; margin-top: 10px; }
+input, select { width: 100%; margin-top: 4px; min-height: 26px; }
+.actions { display: flex; flex-direction: row; margin-top: 12px; }
+button { margin-right: 6px; min-height: 28px; }
+.presets { margin-top: 14px; }
+#status { margin-top: 16px; padding-top: 10px; border-top: 1px solid #555; white-space: pre-wrap; }

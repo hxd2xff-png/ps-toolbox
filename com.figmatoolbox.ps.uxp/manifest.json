@@ -1,0 +1,9 @@
+{
+  "manifestVersion": 5,
+  "id": "com.figmatoolbox.ps.uxp",
+  "name": "字体混排 UXP",
+  "version": "0.1.0",
+  "main": "index.html",
+  "host": {"app": "PS", "minVersion": "25.0", "data": {"apiVersion": 2}},
+  "entrypoints": [{"type": "panel", "id": "fontMixerUXP", "label": {"default": "字体混排 UXP"}, "minimumSize": {"width": 300, "height": 360}, "preferredDockedSize": {"width": 340, "height": 560}, "preferredFloatingSize": {"width": 360, "height": 600}}]
+}
