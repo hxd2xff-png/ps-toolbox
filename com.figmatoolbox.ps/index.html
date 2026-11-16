@@ -752,14 +752,14 @@
     let preloadControlPassed = true;   // 启动直接连接；旧入口参数不再阻塞字体加载
     function preloadControlLocked() { return preloadControl && !preloadControlPassed; }
     let bridgeTimeoutMs = 15000;
-    function evalScript(script, cb) {
+    function evalScript(script, cb, timeoutMs) {
       if (!CEP) { if (cb) cb(''); return; }
       let settled = false;
       const timer = setTimeout(() => {
         if (settled) return;
         settled = true;
         if (cb) cb('EVALSCRIPT_TIMEOUT');
-      }, bridgeTimeoutMs);
+      }, timeoutMs === undefined ? bridgeTimeoutMs : timeoutMs);
       const done = (result) => {
         if (settled) return;
         settled = true;
@@ -1081,7 +1081,7 @@
           diagLog('call', type + ' -> ' + data.error + where);
         }
         call.finish(data);
-      });
+      }, type === 'font-mixer' ? Math.max(80000, bridgeTimeoutMs) : bridgeTimeoutMs);
     }
 
     // 对照模式旧参数仅兼容入口；正常启动直接连接并加载字体。
@@ -1288,7 +1288,7 @@
       fontGuard = setTimeout(() => {
         fontGuard = null;
         $('#font-status').textContent = '宿主长时间无响应，应用结果未知；请先核对文档状态，避免重复应用。';
-      }, 20000);
+      }, Math.max(80000, bridgeTimeoutMs));
     }
 
     // 字体混排结果反馈：成功 / 失败 / 字体不可用都要说清楚，不能静默
@@ -1324,7 +1324,9 @@
       const detail = [];
       if (failed.length) {
         detail.push(failed[0].name + '：' + failed[0].reason +
-          (failed[0].stage ? '／' + failed[0].stage : '') + '；' + (failed[0].integrity || ''));
+          (failed[0].stage ? '／' + failed[0].stage : '') + '；' +
+          (failed[0].writeAttempted === true && failed[0].state !== 'rolled-back'
+            ? '可能部分修改，混排完整性未知' : (failed[0].integrity || '')));
       }
       if (substituted.length) {
         const sb = String(substituted[0] || '');

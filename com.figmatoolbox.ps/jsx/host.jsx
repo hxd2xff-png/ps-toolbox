@@ -979,7 +979,7 @@ var cephostDispatch = (function () {
                 out.failed.push({ id: layer.id, name: String(layer.name), reason: errText(e), stage: _stage,
                     line: e.line, trace: _trace, writeAttempted: _writeAttempted,
                     state: _writeAttempted ? 'unknown' : 'unchanged',
-                    integrity: _writeAttempted ? '可能部分修改，混排完整性未知' : '未发生写入' });
+                    integrity: _writeAttempted ? '\u53ef\u80fd\u90e8\u5206\u4fee\u6539\uff0c\u6df7\u6392\u5b8c\u6574\u6027\u672a\u77e5' : '\u672a\u53d1\u751f\u5199\u5165' });
             }
         }
         return jval(out);
@@ -995,7 +995,7 @@ var cephostDispatch = (function () {
         var fields = {}, names = ['cnFont','enFont','cnSize','enSize','cnColor','enColor'];
         var out = { empty: true, source: src.from, sourceNotes: src.notes || [], layerCount: layers.length, selectedCount: src.refs.length,
             // same rule as applyFontMix: when only the active layer could be read,
-            // say so, otherwise the message "只确认活动层" never reaches the panel
+            // say so, otherwise the message "\u53ea\u786e\u8ba4\u6d3b\u52a8\u5c42" never reaches the panel
             selectionLimited: src.from.indexOf('activeLayer') >= 0 && src.from.indexOf('activeLayers') < 0 || selection.notes.length > 0,
             operation: 'detect-font', failed: collected.failed, fields: fields, layers: [] };
         var seen = {cn:false, en:false}, styleSeen = {cn:false, en:false}, errors = false;

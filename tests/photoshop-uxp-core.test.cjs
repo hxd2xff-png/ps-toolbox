@@ -11,6 +11,18 @@ const manifest=JSON.parse(fs.readFileSync(path.join(uxp,'manifest.json'),'utf8')
 const tk=(text,ranges)=>({textKey:text,textStyleRange:ranges,paragraphStyleRange:[],transform:{xx:1}});
 const range=(from,to,font,size,color={red:255,grain:0,blue:0})=>({from,to,textStyle:{fontPostScriptName:font,size:{_value:size},color}});
 
+test('scaled UXP size writes round-trip through verification and displayed aggregation',()=>{
+ for (const scale of [0.5,2,-2]) {
+  const original=tk('中a',[range(0,2,'Old',10)]);original.transform.xx=scale;
+  const config={cnSize:24,enSize:18};
+  const next=core.buildTextKey(original,config);
+  assert.deepEqual(next.textStyleRange.map(r=>r.textStyle.size._value),[24/Math.abs(scale),18/Math.abs(scale)]);
+  assert.deepEqual(core.verifyApplied(next,next,config),[]);
+  const found=core.aggregate([{id:1,name:'scaled',tk:next}]);
+  assert.equal(found.fields.cnSize.value,24);assert.equal(found.fields.enSize.value,18);
+  assert.equal(original.textStyleRange[0].textStyle.size._value,10);
+ }
+});
 test('segmentsOf returns contiguous UTF-16 character ownership',()=>{
  assert.deepEqual(core.segmentsOf('中文abc，'),[{from:0,to:2,side:'cn'},{from:2,to:5,side:'en'},{from:5,to:6,side:'cn'}]);
 });

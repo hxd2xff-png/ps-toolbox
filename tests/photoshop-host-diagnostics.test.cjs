@@ -86,7 +86,7 @@ function liveHarness(control = false) {
   vm.createContext(context);
   const run = (s) => vm.runInContext(s, context);
   run('const CEP=true,EXT_DIR="/fixture",HOST_EXPECT="4.4.5";let bridgeTimeoutMs=15000,hostReady=false,hostBusy=false,hostGeneration=0,pendingHostCalls=[],preloadControlPassed=true;const preloadControl=' + control + ';' + part('    function preloadControlLocked()', '    let bridgeTimeoutMs') +
-    part('    function evalScript(script, cb)', '    // 面板期望的宿主版本') + loader + hostCall + diagnostics + part('    function callHost(type, args, cb, noRetry)', '    // 对照模式'));
+    part('    function evalScript(script, cb, timeoutMs)', '    // 面板期望的宿主版本') + loader + hostCall + diagnostics + part('    function callHost(type, args, cb, noRetry)', '    // 对照模式'));
   return { output, button, requests, replies, run, start: () => run('runHostDiagnostics()'), expire() { const current = [...timers.values()]; timers.clear(); current.forEach((fn) => fn()); } };
 }
 test('production callHost blocks writes and reads while diagnostic callback is pending', () => {

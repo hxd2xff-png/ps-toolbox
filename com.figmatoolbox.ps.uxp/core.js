@@ -93,7 +93,7 @@ function buildTextKey(original,config) {
     const size=config[seg.side+'Size'];
     if (size!=null) {
       if (!Number.isFinite(size) || size<=0) throw Error('字号必须是正数');
-      style.size={_unit:'pointsUnit',_value:size};
+      style.size={_unit:'pointsUnit',_value:size/scaleOf(original)};
       delete style.impliedFontSize;
     }
     const color=config[seg.side+'Color'];

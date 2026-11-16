@@ -874,6 +874,16 @@ test('showFontMixResult: 成功/失败/替换同时存在时三类都要报出�
   assert.match(text, /已处理\s*3/, '总数要报，实际：' + text);
 });
 
+test('showFontMixResult: attempted writes override contradictory unchanged integrity', () => {
+  const {ctx,el}=loadPanelResult();
+  ctx.showFontMixResult({total:1,ok:0,failed:[{name:'L',reason:'readback failed',writeAttempted:true,state:'unchanged',integrity:'未发生写入'}]});
+  assert.match(el('#font-status').textContent,/完整性未知/);
+  assert.doesNotMatch(el('#font-status').textContent,/未发生写入/);
+  ctx.showFontMixResult({error:'timeout',resultUnknown:true});
+  assert.match(el('#font-status').textContent,/结果未知/);
+  ctx.showFontMixResult({total:1,ok:0,failed:[{name:'L',reason:'cancelled',writeAttempted:true,state:'rolled-back',integrity:'回滚后逐区间复核通过'}]});
+  assert.match(el('#font-status').textContent,/回滚后逐区间复核通过/);
+});
 test('showFontMixResult: 有未处理层（取消）时要说出来', () => {
   const { ctx, el } = loadPanelResult();
   ctx.showFontMixResult({ total: 4, ok: 1, failed: [], empty: false, cancelled: true, unprocessed: 3 });

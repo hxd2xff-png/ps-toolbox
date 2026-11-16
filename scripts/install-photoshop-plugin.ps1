@@ -9,7 +9,7 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 $source = Join-Path $projectRoot 'com.figmatoolbox.ps'
 $extensionsRoot = Join-Path $env:APPDATA 'Adobe\CEP\extensions'
 $target = Join-Path $extensionsRoot 'com.figmatoolbox.ps'
-$registryPath = 'HKCU:\Software\Adobe\CSXS.9'
+$registryPaths = @(9..19 | ForEach-Object { "HKCU:\Software\Adobe\CSXS.$_" })
 
 if (-not (Test-Path -LiteralPath (Join-Path $source 'CSXS\manifest.xml'))) {
     throw "源插件目录无效：$source"
@@ -31,20 +31,22 @@ if (-not (Test-Path -LiteralPath $target)) {
 }
 Get-ChildItem -LiteralPath $source -Force | Copy-Item -Destination $target -Recurse -Force
 
-New-Item -Path $registryPath -Force | Out-Null
-New-ItemProperty -Path $registryPath -Name 'PlayerDebugMode' -PropertyType String -Value '1' -Force | Out-Null
+foreach ($registryPath in $registryPaths) {
+    New-Item -Path $registryPath -Force | Out-Null
+    New-ItemProperty -Path $registryPath -Name 'PlayerDebugMode' -PropertyType String -Value '1' -Force | Out-Null
+}
 
 $sourceFiles = @(Get-ChildItem -LiteralPath $source -Recurse -Force -File | ForEach-Object { $_.FullName.Substring($source.Length).ToLowerInvariant() })
 $targetFiles = @(Get-ChildItem -LiteralPath $target -Recurse -Force -File | ForEach-Object { $_.FullName.Substring($target.Length).ToLowerInvariant() })
 $missing = @($sourceFiles | Where-Object { $_ -notin $targetFiles })
-$debugMode = (Get-ItemProperty -Path $registryPath -Name 'PlayerDebugMode').PlayerDebugMode
+$invalidDebugPaths = @($registryPaths | Where-Object { (Get-ItemProperty -Path $_ -Name 'PlayerDebugMode').PlayerDebugMode -ne '1' })
 
-if ($missing.Count -gt 0 -or $debugMode -ne '1') {
-    throw "安装校验失败：缺少文件 $($missing.Count)，PlayerDebugMode=$debugMode"
+if ($missing.Count -gt 0 -or $invalidDebugPaths.Count -gt 0) {
+    throw "安装校验失败：缺少文件 $($missing.Count)，开发加载注册表异常：$($invalidDebugPaths -join ', ')"
 }
 
 Write-Host 'Photoshop 插件安装完成。' -ForegroundColor Green
 Write-Host "插件目录：$target"
-Write-Host "开发加载：$registryPath\PlayerDebugMode = $debugMode"
+Write-Host "开发加载：CSXS.9–19\PlayerDebugMode = 1"
 Write-Host '请重启 Photoshop 后打开 CEP 扩展。'
 
