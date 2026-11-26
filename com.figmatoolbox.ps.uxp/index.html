@@ -1,15 +1,148 @@
 <!DOCTYPE html>
-<html><head><meta charset="utf-8"><link rel="stylesheet" href="panel.css"></head>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>盗版PS的工具箱</title>
+  <link rel="stylesheet" href="panel.css" />
+  <link rel="stylesheet" href="uxp-compat.css" />
+</head>
 <body>
-<div class="title">字体混排 · UXP</div>
-<div class="hint">Photoshop 2024+ · 独立开发预览版 · 区间写入待真机验收</div>
-<div class="columns">
-<div class="side"><div>中文侧</div><label>字距 tracking（留空保留）<input id="cn-tracking" type="number" step="1"></label><label>字体<select id="cn-font"><option value="">请选择字体</option></select></label><label>字号<input id="cn-size" type="number" min="0.1" placeholder="留空保留"></label><label>颜色<input id="cn-color" type="text" placeholder="#RRGGBB，留空保留"></label></div>
-<div class="side"><div>英文侧</div><label>字距 tracking（留空保留）<input id="en-tracking" type="number" step="1"></label><label>字体<select id="en-font"><option value="">请选择字体</option></select></label><label>字号<input id="en-size" type="number" min="0.1" placeholder="留空保留"></label><label>颜色<input id="en-color" type="text" placeholder="#RRGGBB，留空保留"></label></div>
-</div>
-<div class="actions"><button id="detect">识别选中图层</button><button id="reset">恢复识别回填</button></div>
-<div class="actions"><button id="apply">应用混排</button><button id="apply-color">应用混排与颜色</button></div>
-<div class="presets"><label>方案<select id="preset"><option value="">当前识别 / 用户值</option></select></label><input id="preset-name" placeholder="新方案名称"><button id="save">保存方案</button><button id="remove">删除方案</button></div>
-<div id="status" role="status">正在读取字体库…</div>
-<script src="panel.js"></script>
-</body></html>
+  <!-- ============ 品牌栏 ============ -->
+  <header class="topbar" data-page-node-id="DmdD6WjQHUxDThya5mMPtO">
+    <div class="brand" data-page-node-id="ZxUuwcYBVBfsIfTbez4OcM">
+      <span class="logo" data-page-node-id="lpXbU0YSTZIkJcl0YECGTv">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round" data-page-node-id="20PHeIgnFocEKXEH7R02tq">
+          <rect x="3" y="3" width="8" height="8" rx="2.5" data-page-node-id="2npOcQPUE6aI4B7Mx4ApBa" />
+          <rect x="13" y="3" width="8" height="8" rx="2.5" data-page-node-id="sLZOv49OKtVPwtIZXUUeLr" />
+          <rect x="3" y="13" width="8" height="8" rx="2.5" data-page-node-id="nuu9r0jVAK1w2YTpimVuvO" />
+          <rect x="13" y="13" width="8" height="8" rx="2.5" data-page-node-id="dQ13P0M1NTewNKJocqDGy9" />
+        </svg>
+      </span>
+      <span class="brand-name" data-page-node-id="mJYtsynAzGg8yG9mqtafNX">盗版PS的工具箱</span>
+    </div>
+    <span class="chip-tag" data-page-node-id="pVllz5BCWHrjqrGhNGDxBo">2 IN 1</span>
+  </header>
+
+  <!-- ============ 标签切换 ============ -->
+  <nav class="seg" data-page-node-id="x7Fo7E8k0SB271oQrhcP8q">
+    <div role="button" tabindex="0" class="tab-btn active" data-tab="font" data-page-node-id="lh3mOL8qhU6ouMRcfS1nhi">字体混排</div>  </nav>
+
+  <main class="content" data-page-node-id="DP0Xy7US4buvF9MEtGVkm6">
+    <!-- ============ ① 字体混排 ============ -->
+    <section class="panel active" id="font" data-page-node-id="T869DRNyX4vuL4PUq2OAza">
+      <!-- 方案选择器：仅字体混排功能拥有 -->
+      <div class="preset-bar" id="preset-bar" data-page-node-id="wBPaEjf6MuGBOqZOHoY0vQ">
+        <div class="preset-trigger" id="preset-trigger" data-page-node-id="mqvmpDot2exreMEB6d8GGU">
+          <span class="preset-ico" data-page-node-id="k9XDUtAHwpQ9o9GTpBJVPF">◆</span>
+          <span class="preset-current empty" id="preset-current" data-page-node-id="eqzBdKcIAg1vifdbyAZq3w">未选择方案</span>
+          <span class="preset-caret" data-page-node-id="2vHIGfVdZtfij9YF0LePgi">⌄</span>
+        </div>
+        <div class="preset-pop" id="preset-pop" data-page-node-id="83LcVZXaeTQvFgSWr7aaBX">
+          <div class="preset-pop-head" data-page-node-id="32XStsT6uyOIXWQd7puQxx">字体混排方案</div>
+          <div class="preset-search" data-page-node-id="IBCcM4ydfI2U1WxdBqvBLH"><input type="text" id="preset-search" placeholder="搜索方案…" data-page-node-id="OnOqAzrF8FWq3ZmQp8Jaw4" /></div>
+          <div id="preset-pop-list" data-page-node-id="s3uFANcpLn6ZHSjz1wojYl"></div>
+          <div class="preset-pop-empty" id="preset-pop-empty" style="display:none" data-page-node-id="4KvgKBMZpMZukwNwyzEAMF">暂无方案，在下方保存一个</div>
+        </div>
+      </div>
+
+      <div class="status" id="host-status"></div>
+
+      <div class="card" data-page-node-id="fTFDw4xiKJcAtnY7PhhPGC">
+        <div class="card-head" data-page-node-id="SvAAbqnrdcJbydKlFuBJQT"><span class="dot cn" data-page-node-id="jDJeCWDVryzUERlZfljamX"></span><span>中文</span><div role="button" tabindex="0" class="symbol-btn" data-symbol-side="cn" aria-pressed="false">符号使用中文</div></div>
+        <div class="field" data-page-node-id="8JniWzZr2M3XijmLNCxlZX">
+          <label data-page-node-id="3zQxF4nq2VNjcZk2BW7AyS">字体</label>
+          <div class="dd" data-target="cn-font" data-placeholder="选择字体…">
+            <div role="button" tabindex="0" class="dd-trigger">
+              <span class="dd-current empty">选择字体…</span>
+              <span class="dd-caret">⌄</span>
+            </div>
+            <div class="dd-pop">
+              <div class="dd-head">中文字体</div>
+              <div class="dd-search"><input type="text" placeholder="搜索字体…"></div>
+              <div class="dd-list"></div>
+              <div class="dd-empty" style="display:none">无匹配字体</div>
+            </div>
+          </div>
+          <select id="cn-font" data-page-node-id="qb30phlXOmzDTe75CRJ6dO" style="display:none"></select>
+        </div>
+        <div class="row" data-page-node-id="A7dDG9yloWKawGQQXXx67k">
+          <div class="field grow" data-page-node-id="SbLDVbRP3E4WFBlDuDHNjR">
+            <label data-page-node-id="ctEXRaYLC318MplftKFCfn">字号</label>
+            <input type="number" id="cn-size" placeholder="如 14，留空不改" data-page-node-id="0zlqaZhVRmQVNYDrRIHiWx" />
+          </div>
+          <div class="field" data-page-node-id="GF37ISo8J8SEG1sndqV3l0">
+            <label data-page-node-id="2IBcWBRLInPEpvqA5FWnzA">字色</label>
+            <div class="color-input">
+              <input type="text" id="cn-color" value="#000000" data-page-node-id="86ZKluwVulGNFq6vHsMGxd" />
+              <div role="button" tabindex="0" class="color-swatch" data-color-target="cn-color" title="选择字色" aria-label="选择字色"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" data-page-node-id="h68brhrpkutEVZpZFFAe7I">
+        <div class="card-head" style="display:flex;align-items:center;justify-content:space-between" data-page-node-id="OHbNMT9E012hFuj2odwciv"><span class="lang-title"><span class="dot en" data-page-node-id="jIF2AF8GGfPkgYEOKG1dH7"></span>英文</span><div role="button" tabindex="0" class="symbol-btn" data-symbol-side="en" aria-pressed="false">符号使用英文</div><div role="button" tabindex="0" class="btn-ghost" id="kerning-apply" style="padding:5px 10px;font-size:11px;flex:none">视觉字距微调</div></div><div class="status" id="kerning-status"></div>
+        <div class="field" data-page-node-id="pix27OwA2SVYSuEgOuH2gJ">
+          <label data-page-node-id="AaPEWEFKDmEP5rQP9ilIou">字体</label>
+          <div class="dd" data-target="en-font" data-placeholder="选择字体…">
+            <div role="button" tabindex="0" class="dd-trigger">
+              <span class="dd-current empty">选择字体…</span>
+              <span class="dd-caret">⌄</span>
+            </div>
+            <div class="dd-pop">
+              <div class="dd-head">英文字体</div>
+              <div class="dd-search"><input type="text" placeholder="搜索字体…"></div>
+              <div class="dd-list"></div>
+              <div class="dd-empty" style="display:none">无匹配字体</div>
+            </div>
+          </div>
+          <select id="en-font" data-page-node-id="nyKL6JgsniKsoHk72pGoVw" style="display:none"></select>
+        </div>
+        <div class="row" data-page-node-id="FOjFCKY7V9B4qFxx93vsyz">
+          <div class="field grow" data-page-node-id="jQc8LhAHWWUYGV0QwOQvhH">
+            <label data-page-node-id="JL2lAhW5hU9WVbczp58KT0">字号</label>
+            <input type="number" id="en-size" placeholder="如 12，留空不改" data-page-node-id="RovLYRJwyLzwk5aKmFQoQp" />
+          </div>
+          <div class="field" data-page-node-id="l4FJjV3CvQQyAXPPeJgJhA">
+            <label data-page-node-id="E8jgoRNeXXIVtM7h3Dse2C">字色</label>
+            <div class="color-input">
+              <input type="text" id="en-color" value="#000000" data-page-node-id="3GpxfbLsTeVXqejgeFvwEg" />
+              <div role="button" tabindex="0" class="color-swatch" data-color-target="en-color" title="选择字色" aria-label="选择字色"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 半分按钮：左 = 应用字体混排与颜色，右 = 只应用字体混排（不改颜色） -->
+      <div role="button" tabindex="0" class="btn btn-primary btn-split" id="font-apply"><span class="half" id="font-apply-color" title="应用字体混排，并按左/右侧的字色设置文字颜色">应用字体混排与颜色</span><span class="sep" aria-hidden="true">|</span><span class="half" id="font-apply-nocolor" title="应用字体混排（只改字体/字号），完全保留原文字颜色">应用字体混排</span></div>
+      <div class="status" id="font-status"></div>
+
+      <div class="card" data-page-node-id="ofyJgVCAT90A3HfYDY29ER">
+        <div class="card-head" data-page-node-id="qk707xjfSulLDsR5xwFohE">方案管理</div>
+        <div class="row" style="margin-bottom: 10px" data-page-node-id="b5ijvPKphxRPa4R3566ISi">
+          <div class="field grow" style="margin-bottom: 0" data-page-node-id="gBHVsznLnm7sJBcFw3wKFU">
+            <input type="text" id="preset-name" placeholder="新方案名，如 中文正文" data-page-node-id="9mWkDwkCVAvSTG32SBy9Mj" />
+          </div>
+          <div role="button" tabindex="0" class="btn-ghost" id="preset-save" data-page-node-id="IAYHEtu3x6uJentodvlKGP">保存为方案</div>
+        </div>
+        <div class="row" style="gap: 7px" data-page-node-id="dm5dMFpzXpWhcjR7TI1nE0">
+          <div role="button" tabindex="0" class="btn-ghost" id="preset-import-btn" data-page-node-id="DmAx6JU2BBzBZI3TmfKo02">导入方案</div>
+          <div role="button" tabindex="0" class="btn-ghost" id="preset-export" data-page-node-id="sVsxwjLoR9H5Uo6kzuorDR">导出全部</div>
+          <input type="file" id="preset-import" accept="application/json" style="display: none" data-page-node-id="ZECX5qfBgdNey1XFFOWwHT" />
+        </div>
+        <div class="hint" data-page-node-id="a9avpmWwttFoefmoIVDp6U">在上方「方案」下拉选预设 → 本页微调 → 点「应用字体混排」生效。预设保存在插件本地存储，关掉再开仍在，全程不联网。</div>
+      </div>
+    </section>
+
+    <div class="card" id="host-diagnostics" style="margin-top:10px">
+      <div class="hint">本地字体自动加载：打开插件后自动连接宿主并读取字体，无需先运行诊断。</div>
+      <div class="card-head">宿主加载诊断</div>
+      <button type="button" id="host-diagnose">分阶段诊断（加载失败时运行）</button>
+      <pre id="host-diagnostic-output" aria-live="polite" style="white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;max-height:260px;overflow:auto"></pre>
+    </div>
+  </main>
+
+  
+  
+<script src="uxp-bootstrap.js"></script><script src="cep-ui.js"></script><script src="uxp-adapt.js"></script></body></html>

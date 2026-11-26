@@ -362,6 +362,36 @@
     input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
     input[type="color"]::-webkit-color-swatch { border: none; border-radius: 9px; }
 
+    /* 字色：文本框 + 右侧拾色块；色块是 Photoshop 官方拾色器入口 */
+    .color-input { display: flex; align-items: center; width: 100%; gap: 6px; }
+    .color-input > input[type="text"] { flex: 1 1 0%; width: auto; min-width: 0; }
+    .color-swatch {
+      width: 30px; height: 36px;
+      flex: 0 0 30px;
+      padding: 0;
+      border: 1px solid rgba(26, 26, 26, .14);
+      border-radius: 10px;
+      background: #000;
+      cursor: pointer;
+      outline: none;
+      box-shadow:
+        inset 0 0 0 2px rgba(255, 255, 255, .92),
+        0 3px 8px -6px rgba(80, 45, 30, .55);
+      transition: border-color .18s, box-shadow .18s, transform .12s;
+    }
+    .color-swatch:hover {
+      border-color: var(--o-1);
+      box-shadow:
+        inset 0 0 0 2px rgba(255, 255, 255, .92),
+        0 5px 12px -6px rgba(255, 90, 43, .55);
+    }
+    .color-swatch:active { transform: translateY(1px) scale(.98); }
+    .color-swatch:focus-visible {
+      box-shadow:
+        inset 0 0 0 2px #fff,
+        0 0 0 3px var(--o-soft);
+    }
+
     /* ---------- 纯色 / 渐变 分段控件（iOS segmented 同款） ---------- */
     .seg { display: flex; gap: 3px; background: var(--fill); border-radius: 11px; padding: 3px; }
     .seg-btn {
@@ -562,7 +592,10 @@
           </div>
           <div class="field" data-page-node-id="GF37ISo8J8SEG1sndqV3l0">
             <label data-page-node-id="2IBcWBRLInPEpvqA5FWnzA">字色</label>
-            <input type="text" id="cn-color" value="#000000" data-page-node-id="86ZKluwVulGNFq6vHsMGxd" />
+            <div class="color-input">
+              <input type="text" id="cn-color" value="#000000" data-page-node-id="86ZKluwVulGNFq6vHsMGxd" />
+              <button type="button" class="color-swatch" data-color-target="cn-color" title="选择字色" aria-label="选择字色"></button>
+            </div>
           </div>
         </div>
       </div>
@@ -592,7 +625,10 @@
           </div>
           <div class="field" data-page-node-id="l4FJjV3CvQQyAXPPeJgJhA">
             <label data-page-node-id="E8jgoRNeXXIVtM7h3Dse2C">字色</label>
-            <input type="text" id="en-color" value="#000000" data-page-node-id="3GpxfbLsTeVXqejgeFvwEg" />
+            <div class="color-input">
+              <input type="text" id="en-color" value="#000000" data-page-node-id="3GpxfbLsTeVXqejgeFvwEg" />
+              <button type="button" class="color-swatch" data-color-target="en-color" title="选择字色" aria-label="选择字色"></button>
+            </div>
           </div>
         </div>
       </div>
@@ -711,31 +747,84 @@
     try { cs = new CSInterface(); } catch (e) { cs = null; }
 
 
-    // ---- 颜色调整：调用 Photoshop 原生拾色器（CEP 环境拦截色块点击） ----
-    // 所有 input[type=color]（中英文字色/填充/描边/阴影/渐变色标）统一走 PS 调色窗口；
-    // 浏览器预览环境不拦截，仍用系统色板。
+    // ---- 颜色调整：调用 Photoshop 原生拾色器 ----
+    // 字色文本框右侧色块是统一入口；浏览器预览环境不连接宿主，明确提示。
+    function pickerHex(value) {
+      let h = String(value == null ? '' : value).trim();
+      if (/^[0-9a-f]{6}$/i.test(h)) h = '#' + h;
+      if (/^#[0-9a-f]{6}$/i.test(h)) return h.toUpperCase();
+      if (/^#[0-9a-f]{3}$/i.test(h)) {
+        return ('#' + h.charAt(1) + h.charAt(1) + h.charAt(2) + h.charAt(2) + h.charAt(3) + h.charAt(3)).toUpperCase();
+      }
+      return '';
+    }
+    function syncColorSwatch(input) {
+      if (!input || !input.id) return;
+      const swatch = $('.color-swatch[data-color-target="' + input.id + '"]');
+      if (!swatch) return;
+      const hex = pickerHex(input.value);
+      swatch.style.backgroundColor = hex || '#000000';
+      swatch.setAttribute('aria-label', hex ? '选择字色，当前 ' + hex : '选择字色');
+      swatch.setAttribute('title', '选择字色');
+    }
+    function syncAllColorSwatches() {
+      document.querySelectorAll('.color-swatch[data-color-target]').forEach((swatch) => {
+        syncColorSwatch($('#' + swatch.getAttribute('data-color-target')));
+      });
+    }
     function openPsPicker(input) {
+      if (!CEP) {
+        figmaNotify('拾色器需要在 Photoshop 面板中使用');
+        return;
+      }
       const cur = hexToRgb(input.value || '#000000');
       callHost('pick-color', { r: cur.r, g: cur.g, b: cur.b }, (r) => {
         if (r && r.ok) {
           input.value = rgbToHex({ r: r.r, g: r.g, b: r.b });
+          syncColorSwatch(input);
           input.dispatchEvent(new Event('input', { bubbles: true }));
           input.dispatchEvent(new Event('change', { bubbles: true }));
+        } else if (r && r.busy) {
+          figmaNotify('拾色器已打开，请先完成当前取色');
+        } else if (r && r.canceled) {
+          return;
         } else if (r && r.error) {
           figmaNotify('拾色器不可用：' + r.error);
         }
       });
+    }
+    function openPickerFromSwatch(swatch) {
+      if (!swatch) return false;
+      const target = swatch.getAttribute('data-color-target') || '';
+      if (!/^[\w-]+$/.test(target)) return false;
+      const input = $('#' + target);
+      if (!input) return false;
+      openPsPicker(input);
+      return true;
     }
     if (window.__adobe_cep__) {
       document.addEventListener('mousedown', (e) => {
         const t = e.target;
         if (t && t.type === 'color') { e.preventDefault(); openPsPicker(t); }
       }, true);
-      document.addEventListener('click', (e) => {
-        const t = e.target;
-        if (t && t.type === 'color') e.preventDefault();
-      }, true);
     }
+    document.addEventListener('click', (e) => {
+      const t = e.target;
+      if (t && t.type === 'color') { e.preventDefault(); return; }
+      const swatch = t && t.closest ? t.closest('.color-swatch') : null;
+      if (!swatch) return;
+      e.preventDefault();
+      openPickerFromSwatch(swatch);
+    }, true);
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+      const t = e.target;
+      const swatch = t && t.closest ? t.closest('.color-swatch') : null;
+      if (!swatch) return;
+      e.preventDefault();
+      openPickerFromSwatch(swatch);
+    }, true);
+    syncAllColorSwatches();
 
     // ============================================================
     // 宿主桥：确保 ExtendScript 宿主（jsx/host.jsx）真的可用
@@ -1244,7 +1333,10 @@
         const el = $(sel);
         if (el && !el.__touchBound) {
           el.__touchBound = true;
-          el.addEventListener('input', () => { userTouched[sel] = true; });
+          el.addEventListener('input', () => {
+            userTouched[sel] = true;
+            if (sel === '#cn-color' || sel === '#en-color') syncColorSwatch(el);
+          });
         }
       });
     }
@@ -1272,7 +1364,12 @@
           else {
             const el = $(sel);
             if (kind === 'Size') { el.value = f.value != null ? f.value : ''; el.placeholder = f.state === 'mixed'?'混合字号（留空保留）':'留空保留'; }
-            else { el.type = 'text'; el.value = f.value ? rgbToHex(f.value) : ''; el.placeholder = labels[f.state] || ''; }
+            else {
+              el.type = 'text';
+              el.value = f.value ? rgbToHex(f.value) : '';
+              el.placeholder = labels[f.state] || '';
+              syncColorSwatch(el);
+            }
           }
         });
       });
@@ -1912,9 +2009,13 @@
       lastSyncColor = p.syncColor === true;   // 旧方案无此字段 → 默认不调整颜色
       if (p.cnColor) $('#cn-color').value = rgbToHex(p.cnColor);
       if (p.enColor) $('#en-color').value = rgbToHex(p.enColor);
+      syncColorSwatch($('#cn-color'));
+      syncColorSwatch($('#en-color'));
     }
 
     function openPresetPop() {
+      // 方案与字体/格式下拉共用一套全局弹层：打开任一选择器前先收起其余弹层。
+      closeAllPickers();
       $('#preset-pop').classList.add('open');
       $('#preset-bar').classList.add('open');
       fitPopup($('#preset-pop'), $('#preset-bar'), 300, 0);

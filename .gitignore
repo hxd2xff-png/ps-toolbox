@@ -9,3 +9,21 @@ HANDOFF.MD
 .tmp*/
 .DS_Store
 Thumbs.db
+独立工作室/
+
+# Local build output and generated packages
+output/
+PS-all-in-one.zip
+
+# One-off investigation and agent scratch files
+.dsh-file-attachment/
+.freebuff/
+findings.md
+progress.md
+task_plan.md
+$null
+0)
+artifacts/*
+!artifacts/uxp-ccx/
+artifacts/uxp-ccx/*
+!artifacts/uxp-ccx/build-ccx.mjs

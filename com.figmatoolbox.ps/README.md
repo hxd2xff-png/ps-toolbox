@@ -185,7 +185,7 @@ v1.4.0 换成 Photoshop 自己录制的形状（也是本机另一个可用混�
 | --- | --- | --- |
 | 字体混排 | 一致 | 走 Action Manager `textStyleRange`，中文字符（含 CJK 标点/假名）用中文字体，其余用英文字体；字号、颜色按区间写入 |
 | 自动字距 | 一致 | 符号 tracking -300、配对外括号外缘值可调；PS 的 tracking 单位正好是 Figma 的 10 倍，默认 -45 → -450 |
-| 字色选择 | PS 增强 | 所有颜色块点击直接调起 Photoshop 原生拾色器（`app.showColorPicker`），确认后同步写入前景色 |
+| 字色选择 | PS 增强 | 字色文本框右侧色块直接调起 Photoshop 原生拾色器（`app.showColorPicker`），确认后回填十六进制字色 |
 | 方案预设 | 一致 | 字体混排方案支持保存/更新/重命名/删除/搜索/导入/导出 JSON；持久化改用面板 localStorage（CEP 有真实 origin） |
 
 已知差异（由 Photoshop 能力决定）：

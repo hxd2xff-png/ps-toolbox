@@ -52,6 +52,15 @@ test('symbol buttons occupy their language headers and English title is correcte
  assert.equal((panel.match(/data-symbol-side="(?:cn|en)"/g)||[]).length,2);
  assert.match(panel,/\.symbol-btn \{ margin-left:auto/);
 });
-test('diagnostics is always visible below the main controls',()=>{
- assert.ok(panel.indexOf('id="host-diagnostics"')>panel.indexOf('id="preset-export"'));assert.doesNotMatch(panel,/<details id="host-diagnostics"/);assert.match(panel,/无需先运行诊断/);
+test('the CEP panel keeps its diagnostics card, the UXP panel restores it at the bottom',()=>{
+ // The user asked for this block to stay: it is how a broken host load gets traced.
+ const uxp=fs.readFileSync(path.join(__dirname,'../com.figmatoolbox.ps.uxp/index.html'),'utf8');
+ assert.match(panel,/id="host-diagnostics"/);
+ assert.match(panel,/id="host-diagnose"/);
+ assert.match(uxp,/id="host-diagnostics"/);
+ assert.match(uxp,/id="host-diagnose"/);
+ // Bottom of the panel: after the scheme section, inside <main>.
+ const diag=uxp.indexOf('id="host-diagnostics"'), scheme=uxp.indexOf('id="preset-export"'), mainEnd=uxp.indexOf('</main>');
+ assert.ok(diag>scheme&&diag<mainEnd,'diagnostics card sits below the scheme section and inside main');
+ assert.equal((uxp.match(/id="host-diagnostics"/g)||[]).length,1);
 });

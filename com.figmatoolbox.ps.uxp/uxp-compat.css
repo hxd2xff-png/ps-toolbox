@@ -1,0 +1,210 @@
+/* ============================================================
+   UXP 引擎兼容层（只处理 UXP 不支持的 CSS 能力）
+   - 视觉规范仍以 panel.css（CEP <style> 原文）为准
+   - 这里不得出现颜色/字号/间距等设计值，除非是关闭原生外观后的等效盒尺寸
+   ============================================================ */
+html, body { height: 100%; }
+/* UXP 面板不会把 body 当滚动容器 */
+body { position: absolute; top: 0; right: 0; bottom: 0; left: 0; overflow-y: auto; }
+
+/* 文本/SVG 平滑：UXP 不保证支持这些浏览器属性，保留为最佳努力。
+   Windows UXP 的最终文字平滑由宿主字体后端决定，CSS 不能强制改用
+   Chromium 的合成抗锯齿。 */
+html, body, button, input, select, textarea {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+svg, svg * { shape-rendering: geometricPrecision; }
+
+/* UXP 不支持 display:grid：三个单子元素居中容器改用 flex */
+.logo, .preset-ico, .preset-row-del { display: flex; align-items: center; justify-content: center; }
+/* UXP 会把 SVG 的 fill/stroke 属性当成默认黑色；这里恢复 CEP 的白色线框图标 */
+.logo svg, .logo svg * { fill: none !important; stroke: #fff !important; }
+.logo > svg { display: none !important; }
+.uxp-logo-glyph {
+  width: 15px;
+  height: 15px;
+  flex-grow: 0;
+  flex-shrink: 0;
+  flex-basis: 15px;
+  background-image: url("data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2.2' stroke-linejoin='round'><rect x='3' y='3' width='8' height='8' rx='2.5'/><rect x='13' y='3' width='8' height='8' rx='2.5'/><rect x='3' y='13' width='8' height='8' rx='2.5'/><rect x='13' y='13' width='8' height='8' rx='2.5'/></svg>");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 15px 15px;
+}
+
+/* UXP 旧运行时没有 flex gap：按 CEP 的 gap 值补等效外边距（只补未写 margin 的项） */
+.row > * + * { margin-left: 8px; }
+.card-head > * + * { margin-left: 8px; }
+.card-head > .symbol-btn { margin-left: auto; }
+.lang-title > * + * { margin-left: 8px; }
+.preset-trigger > * + * { margin-left: 9px; }
+.dd-trigger > * + * { margin-left: 9px; }
+.preset-row > * + * { margin-left: 8px; }
+.dd-list > * + * { margin-top: 2px; }
+#preset-import-btn + #preset-export { margin-left: 7px !important; }
+
+/* UXP 的 flex 只稳定支持 longhand；CEP 里的 flex:1 / flex:none 简写会被忽略，
+   导致字段和按钮按内容宽度收缩。这里逐项展开，不改 CEP 的视觉值。 */
+.topbar, .brand, .seg, .card-head, .lang-title, .row, .preset-trigger,
+.dd-trigger, .preset-row, .dd-row {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+}
+.card-head, .lang-title, .preset-trigger, .dd-trigger, .preset-row, .dd-row {
+  align-items: center !important;
+}
+.row { align-items: flex-end !important; }
+.row > .field + .field { margin-bottom: 10px !important; }
+.brand > .logo, .preset-ico, .dd-caret, .preset-caret, .dot,
+.symbol-btn, .card-head > .btn-ghost {
+  flex-grow: 0 !important;
+  flex-shrink: 0 !important;
+  flex-basis: auto !important;
+}
+.tab-btn {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-grow: 1 !important;
+  flex-shrink: 1 !important;
+  flex-basis: 0% !important;
+}
+.dd-current, .preset-current {
+  flex-grow: 1 !important;
+  flex-shrink: 1 !important;
+  flex-basis: 0% !important;
+  min-width: 0 !important;
+}
+/* UXP 忽略非 grow 字段的 flex-basis，直接采用原生 input 的固有宽度（实测会把字色
+   撑到 223px、字号挤到 101px）。用 CEP 400px 面板实测的 163/171 作为 grow 权重，
+   让两列按同一比例分配剩余宽度；400px 下与 CEP 一致。 */
+.row > .field {
+  flex-grow: 171 !important;
+  flex-shrink: 1 !important;
+  flex-basis: 0% !important;
+  min-width: 0 !important;
+}
+.row > .field.grow { flex-grow: 163 !important; }
+.btn-split .half {
+  flex-grow: 1 !important;
+  flex-shrink: 1 !important;
+  flex-basis: 0% !important;
+  text-align: center;
+}
+
+/* 带 class 的 CEP 按钮在 UXP 生成阶段已转成 div[role=button]，补回按钮盒模型 */
+.symbol-btn[role="button"], .btn-ghost[role="button"] {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: auto !important;
+}
+.btn[role="button"] {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+.btn-split[role="button"] {
+  justify-content: flex-start !important;
+}
+
+/* UXP 不支持多层 linear-gradient 背景：用 26px SVG 平铺复刻 CEP 的网格 */
+body {
+  background-image: url("data:image/svg+xml;charset=utf-8,<svg xmlns='http://www.w3.org/2000/svg' width='26' height='26'><path d='M0 0H26M0 0V26' stroke='%23000000' stroke-opacity='0.035' stroke-width='1' fill='none'/></svg>");
+  background-repeat: repeat;
+  background-size: 26px 26px;
+}
+
+/* UXP 原生输入框会画自己的边框/内距；这里只关闭原生外观并复刻 CEP 的等效盒高。
+   CEP 的盒高是 36px（9px 上下内距 + 单行文本）。UXP 的 input 不认 line-height，
+   文字会贴顶，所以必须用真实上下内距把它压回垂直居中。
+   UXP Windows 对纯 background 填充的圆角不做抗锯齿，对描边则正常；补一圈同色
+   1px 描边遮住锯齿，同时把 padding 各减 1px，盒高和文字落点都与 CEP 相同。 */
+input[type="text"], input[type="number"] {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  border: 1px solid var(--fill) !important;
+  margin: 0 !important;
+  display: block !important;
+  width: 100% !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  max-height: 36px !important;
+  padding: 8px 10px !important;
+  line-height: normal !important;
+  box-sizing: border-box;
+}
+/* 弹层搜索框在 CEP 是 8px 上下内距 + 12.5px 字号（实测 33px） */
+.dd-search input, .preset-search input {
+  height: 33px !important;
+  min-height: 33px !important;
+  max-height: 33px !important;
+  padding: 7px 9px !important;
+  line-height: normal !important;
+}
+/* UXP 原生输入有较大的固有宽度：允许 flex 字段收缩，避免把卡片撑出面板 */
+.row > .field, .field.grow { min-width: 0 !important; }
+.field > label { display: block !important; margin: 0 0 5px !important; padding: 0 !important; }
+.field > input[type="text"], .field > input[type="number"] { min-width: 0 !important; max-width: 100% !important; }
+
+/* 字色是一组横向控件：原生 input 不能覆盖右侧色块，因此用 flex 并排。 */
+.color-input {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0 !important;
+  width: 100% !important;
+}
+.color-input > input[type="text"] {
+  flex: 1 1 0% !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+.color-input > .color-swatch {
+  display: block !important;
+  flex: 0 0 30px !important;
+  width: 30px !important;
+  min-width: 30px !important;
+  max-width: 30px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  max-height: 36px !important;
+  margin-left: 6px !important;
+  background-clip: padding-box !important;
+}
+
+/* UXP 的 1.5px 内描边会落在半像素上；用 2px 整像素保持焦点框边缘清晰。 */
+input[type="text"]:focus, input[type="number"]:focus {
+  box-shadow: inset 0 0 0 2px var(--o-1) !important;
+}
+
+/* 没有边框的浅色圆角提示条同样补同色描边，避免 UXP 把填充圆角画成台阶。 */
+.status.diag.ok {
+  border: 1px solid rgba(29, 122, 62, .09);
+  padding: 5px 8px;
+}
+.status.diag.bad {
+  border: 1px solid rgba(179, 38, 30, .11);
+  padding: 5px 8px;
+}
+
+/* UXP 不支持 filter:brightness()：用同一渐变各通道 +5% 的亮度复刻悬停高亮 */
+.btn-primary:hover { background: linear-gradient(135deg, #FF9866, #FF5F2D); }
+
+/* UXP 的原生文本输入始终绘制在 HTML 之上（z-index 无效）。
+   uxp-adapt.js 只给与展开弹层实际重叠的输入加这个类，弹层之外的字段
+   继续显示；不能用 body.popup-open 把整个面板的输入一起隐藏。 */
+input.uxp-popup-under {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* UXP 对 inline span 的 opacity 不可靠：勾选/删除按钮用等价的 visibility 显隐 */
+.dd-row-check { visibility: hidden; }
+.dd-row.on .dd-row-check { visibility: visible; }
+.preset-row-del { visibility: hidden; }
+.preset-row:hover .preset-row-del { visibility: visible; }

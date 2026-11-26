@@ -33,15 +33,20 @@ if errorlevel 8 (
   exit /b 1
 )
 
-reg add "HKCU\Software\Adobe\CSXS.9" /v PlayerDebugMode /t REG_SZ /d 1 /f >nul
-if errorlevel 1 (
-  echo [ERROR] Could not enable CEP development loading.
-  exit /b 1
+for /l %%V in (9,1,19) do (
+  reg add "HKCU\Software\Adobe\CSXS.%%V" /v PlayerDebugMode /t REG_SZ /d 1 /f >nul
+  if errorlevel 1 (
+    echo [ERROR] Could not enable CEP development loading for CSXS.%%V.
+    goto registry_error
+  )
 )
 
 echo Photoshop plugin installed successfully.
 echo Plugin: "%DST%"
-echo Registry: HKCU\Software\Adobe\CSXS.9\PlayerDebugMode = 1
+echo Registry: HKCU\Software\Adobe\CSXS.9 ~ CSXS.19\PlayerDebugMode = 1
 echo Restart Photoshop before opening the extension.
 exit /b 0
+
+:registry_error
+exit /b 1
 
