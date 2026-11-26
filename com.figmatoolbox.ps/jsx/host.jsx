@@ -1098,16 +1098,75 @@ var cephostDispatch = (function () {
        Photoshop exposes this as TextItem.autoKerning = AutoKernType.OPTICAL
        ("Adjusts the spacing between adjacent characters based on their
        shapes"), which is the Character panel option the user asked for.
-       It is layer scoped. Every write is verified by reading it back; if
-       the layer refuses it, symbol tracking is used instead. */
+       It is layer scoped, but Photoshop 2020 can leave individual text
+       style ranges on Metrics even after the layer property reads Optical.
+       Every write is therefore verified at both levels, and textKey ranges
+       are repaired through the descriptor path when needed. */
 
     function opticalSupported() {
         try { return (typeof AutoKernType !== 'undefined' && AutoKernType && AutoKernType.OPTICAL !== undefined); } catch (e) { return false; }
     }
 
+    function autoKernRangeInfo(layerId) {
+        var info = { total: 0, explicit: 0, optical: 0, bad: 0, sample: '', error: '' };
+        try {
+            var tk = textKeyOf(layerId);
+            var list = tk.getList(S('textStyleRange'));
+            info.total = list.count;
+            var want = S('opticalKern');
+            for (var i = 0; i < list.count; i++) {
+                var item = list.getObjectValue(i);
+                if (!item.hasKey(S('textStyle'))) continue;
+                var st = item.getObjectValue(S('textStyle'));
+                if (!st.hasKey(S('autoKern'))) continue;
+                info.explicit++;
+                var got = st.getEnumerationValue(S('autoKern'));
+                if (String(got) === String(want)) {
+                    info.optical++;
+                } else {
+                    info.bad++;
+                    if (!info.sample) {
+                        try { info.sample = String(typeIDToStringID(got)); }
+                        catch (eName) { info.sample = String(got); }
+                    }
+                }
+            }
+        } catch (eRead) {
+            info.error = errText(eRead);
+        }
+        return info;
+    }
+
+    // Descriptor fallback for hosts that accept the layer property but leave
+    // one or more character ranges on Metrics (observed on Photoshop 2020).
+    function setAutoKernRangesOptical(layerId) {
+        var tk = textKeyOf(layerId);
+        var list = tk.getList(S('textStyleRange'));
+        if (!list.count) return false;
+        var next = new ActionList();
+        for (var i = 0; i < list.count; i++) {
+            var item = copyDesc(list.getObjectValue(i));
+            var style = item.hasKey(S('textStyle')) ? copyDesc(item.getObjectValue(S('textStyle'))) : new ActionDescriptor();
+            style.putEnumerated(S('autoKern'), S('autoKern'), S('opticalKern'));
+            item.putObject(S('textStyle'), S('textStyle'), style);
+            next.putObject(S('textStyleRange'), item);
+        }
+        if (hasKey(tk, 'engineData')) eraseKey(tk, 'engineData');
+        tk.putList(S('kerningRange'), new ActionList());
+        tk.putList(S('textStyleRange'), next);
+        var ref = new ActionReference();
+        ref.putIdentifier(S('layer'), layerId);
+        var set = new ActionDescriptor();
+        set.putReference(S('null'), ref);
+        set.putObject(S('to'), S('textLayer'), tk);
+        executeAction(S('set'), set, DialogModes.NO);
+        return true;
+    }
+
     function applyAutoKerning(args) {
         stage('collect');
-        var out = { nodes: 0, applied: 0, failed: 0, empty: true, mode: 'optical', optical: 0, skipped: [], source: '' };
+        var out = { nodes: 0, applied: 0, failed: 0, empty: true, mode: 'optical', optical: 0, skipped: [], source: '',
+            leadingRequested: false, leading: 0, leadingFailed: 0, leadingMode: 'off' };
         var src = activeLayerSource();
         var layers = [];
         walkLayers(src.refs, function (l) { if (isTextLayer(l)) layers.push(l); });
@@ -1130,11 +1189,28 @@ var cephostDispatch = (function () {
                 layer.textItem.autoKerning = AutoKernType.OPTICAL;
                 stage('optical layer ' + (i + 1) + ' verify');
                 var back = layer.textItem.autoKerning;
-                if (back === AutoKernType.OPTICAL || String(back) === String(AutoKernType.OPTICAL)) {
-                    out.applied++;
-                } else {
+                if (!(back === AutoKernType.OPTICAL || String(back) === String(AutoKernType.OPTICAL))) {
                     out.failed++;
                     out.skipped.push(String(layer.name) + ': Photoshop did not retain Optical');
+                    continue;
+                }
+                var ranges = autoKernRangeInfo(layer.id);
+                if (!ranges.error && ranges.bad) {
+                    stage('optical layer ' + (i + 1) + ' range repair');
+                    try {
+                        setAutoKernRangesOptical(layer.id);
+                    } catch (eRepair) {
+                        var repairMsg = String(layer.name) + ': range repair ' + errText(eRepair);
+                        if (!inArray(out.skipped, repairMsg)) out.skipped.push(repairMsg);
+                    }
+                    ranges = autoKernRangeInfo(layer.id);
+                }
+                if (ranges.bad) {
+                    out.failed++;
+                    out.skipped.push(String(layer.name) + ': ' + ranges.bad +
+                        ' text range(s) still use ' + (ranges.sample || 'non-optical') + ' kerning');
+                } else {
+                    out.applied++;
                 }
             } catch (eO) {
                 out.failed++;
